@@ -52,6 +52,9 @@ def health():
     return jsonify({"status": "healthy"})
 
 
+FTP_DATA_DIR = '/data'
+
+
 @app.route('/upload', methods=['POST'])
 def upload():
     with stats_lock:
@@ -68,6 +71,42 @@ def upload():
     with open(path, 'wb') as f:
         f.write(data)
     return jsonify({"status": "ok", "size": len(data)})
+
+
+@app.route('/api/files/upload', methods=['POST'])
+def upload_ftp_file():
+    """Upload a file to the FTP data directory."""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({"error": "No filename"}), 400
+    path = os.path.join(FTP_DATA_DIR, f.filename)
+    f.save(path)
+    os.chmod(path, 0o644)
+    return jsonify({"ok": True, "filename": f.filename, "size": os.path.getsize(path)})
+
+
+@app.route('/api/files')
+def list_ftp_files():
+    """List files available for FTP download."""
+    files = []
+    for name in sorted(os.listdir(FTP_DATA_DIR)):
+        path = os.path.join(FTP_DATA_DIR, name)
+        if os.path.isfile(path):
+            size = os.path.getsize(path)
+            files.append({"name": name, "size": size})
+    return jsonify({"files": files})
+
+
+@app.route('/api/files/<name>', methods=['DELETE'])
+def delete_ftp_file(name):
+    """Delete a file from the FTP data directory."""
+    path = os.path.join(FTP_DATA_DIR, name)
+    if not os.path.isfile(path):
+        return jsonify({"error": "File not found"}), 404
+    os.remove(path)
+    return jsonify({"ok": True, "message": f"Deleted {name}"})
 
 
 @app.route('/generate/<int:size_mb>')

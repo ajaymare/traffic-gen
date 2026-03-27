@@ -72,7 +72,7 @@ const PROTOCOLS = {
             { key: 'port', label: 'Port', type: 'number', default: 21 },
             { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
             { key: 'password', label: 'Password', type: 'text', default: '' },
-            { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
+            { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin', 'testfile_1gb.bin'], default: 'testfile_1gb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
@@ -354,13 +354,30 @@ async function loadShaping() {
     } catch (e) { /* ignore */ }
 }
 
+// ─── FTP File List ──────────────────────────────────────────
+
+async function loadFtpFileList() {
+    try {
+        const resp = await fetch('http://' + SRV + ':5000/api/files');
+        const data = await resp.json();
+        const sel = document.getElementById('cfg-ftp-filename');
+        if (!sel || !data.files) return;
+        const current = sel.value;
+        sel.innerHTML = data.files.map(f =>
+            '<option value="' + f.name + '"' + (f.name === current ? ' selected' : '') + '>' +
+            f.name + ' (' + fmtBytes(f.size) + ')</option>').join('');
+    } catch(e) { /* server may not be reachable */ }
+}
+
 // ─── Init ──────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
     loadShaping();
+    loadFtpFileList();
     document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
     setInterval(pollStatus, 2000);
+    setInterval(loadFtpFileList, 10000);
     pollStatus();
     addLog('Dashboard ready.');
 });

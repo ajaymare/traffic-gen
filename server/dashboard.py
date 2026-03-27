@@ -270,6 +270,23 @@ DASHBOARD_HTML = r"""
             </table>
         </div>
     </div>
+    <div class="card">
+        <div class="card-header">
+            <span>FTP Files</span>
+            <label class="btn btn-start" style="cursor:pointer;margin:0">
+                Upload File <input type="file" id="ftp-upload-input" style="display:none" onchange="uploadFtpFile()">
+            </label>
+        </div>
+        <div class="card-body">
+            <div id="upload-status" style="display:none;padding:8px;margin-bottom:8px;border-radius:4px;background:#065f46;color:#6ee7b7"></div>
+            <table class="connections-table">
+                <thead><tr><th>Filename</th><th>Size</th><th>Action</th></tr></thead>
+                <tbody id="ftp-files-body">
+                    <tr><td colspan="3" style="text-align:center;color:#94a3b8">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 </div>
 
@@ -349,7 +366,7 @@ const PROTOCOLS = {
         { key: 'port', label: 'Port', type: 'number', default: 21 },
         { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
         { key: 'password', label: 'Password', type: 'text', default: '' },
-        { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
+        { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin','testfile_1gb.bin'], default: 'testfile_1gb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
@@ -746,10 +763,61 @@ async function pollServerStatus() {
     } catch(e) {}
 }
 
+// ─── FTP File Management ────────────────────────────────────
+async function loadFtpFiles() {
+    try {
+        const resp = await fetch('/api/files');
+        const data = await resp.json();
+        const tbody = document.getElementById('ftp-files-body');
+        if (!data.files || !data.files.length) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8">No files</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.files.map(f =>
+            '<tr><td>' + f.name + '</td><td>' + fmtBytes(f.size) + '</td>' +
+            '<td><button class="btn btn-danger" style="padding:2px 8px;font-size:11px" ' +
+            'onclick="deleteFtpFile(\'' + f.name + '\')">Delete</button></td></tr>').join('');
+    } catch(e) {}
+}
+
+async function uploadFtpFile() {
+    const input = document.getElementById('ftp-upload-input');
+    if (!input.files.length) return;
+    const file = input.files[0];
+    const form = new FormData();
+    form.append('file', file);
+    const status = document.getElementById('upload-status');
+    status.style.display = 'block';
+    status.textContent = 'Uploading ' + file.name + '...';
+    try {
+        const resp = await fetch('/api/files/upload', { method: 'POST', body: form });
+        const data = await resp.json();
+        if (data.ok) {
+            status.textContent = 'Uploaded ' + data.filename + ' (' + fmtBytes(data.size) + ')';
+            loadFtpFiles();
+        } else {
+            status.style.background = '#7f1d1d';
+            status.textContent = 'Error: ' + (data.error || 'Upload failed');
+        }
+    } catch(e) {
+        status.style.background = '#7f1d1d';
+        status.textContent = 'Upload error: ' + e;
+    }
+    input.value = '';
+    setTimeout(() => { status.style.display = 'none'; status.style.background = '#065f46'; }, 5000);
+}
+
+async function deleteFtpFile(name) {
+    if (!confirm('Delete file "' + name + '"?')) return;
+    await fetch('/api/files/' + name, { method: 'DELETE' });
+    loadFtpFiles();
+}
+
 // ─── Polling Loop ────────────────────────────────────────────
 async function pollAll() {
     if (activeTab === 'server') {
         await pollServerStatus();
+        loadFtpFiles();
     } else if (clientList[activeTab]) {
         await pollClientStatus(activeTab);
     }
@@ -803,6 +871,7 @@ async function loadClients() {
 // ─── Init ────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     loadClients();
+    loadFtpFiles();
     setInterval(pollAll, 2000);
     pollAll();
 });
@@ -1072,6 +1141,41 @@ def client_server_host(name):
 def client_random_bandwidth(name):
     result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json)
     return jsonify(result), code
+
+
+FTP_DATA_DIR = '/data'
+
+
+@app.route('/api/files')
+def list_files():
+    files = []
+    for name in sorted(os.listdir(FTP_DATA_DIR)):
+        path = os.path.join(FTP_DATA_DIR, name)
+        if os.path.isfile(path):
+            files.append({"name": name, "size": os.path.getsize(path)})
+    return jsonify({"files": files})
+
+
+@app.route('/api/files/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    f = request.files['file']
+    if not f.filename:
+        return jsonify({"error": "No filename"}), 400
+    path = os.path.join(FTP_DATA_DIR, f.filename)
+    f.save(path)
+    os.chmod(path, 0o644)
+    return jsonify({"ok": True, "filename": f.filename, "size": os.path.getsize(path)})
+
+
+@app.route('/api/files/<name>', methods=['DELETE'])
+def delete_file(name):
+    path = os.path.join(FTP_DATA_DIR, name)
+    if not os.path.isfile(path):
+        return jsonify({"error": "File not found"}), 404
+    os.remove(path)
+    return jsonify({"ok": True, "message": f"Deleted {name}"})
 
 
 if __name__ == '__main__':
