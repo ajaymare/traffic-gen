@@ -68,7 +68,7 @@ Open `http://<client-vm-ip>:8080` for the dashboard.
 | 9998/udp | UDP echo |
 | 21 | FTP |
 | 21100-21110 | FTP passive |
-| 22 | SSH (testuser/testpass) |
+| 22 (map to 2222 if 22 is in use) | SSH (testuser/testpass) |
 
 ## Default Credentials
 
@@ -108,7 +108,7 @@ Open `http://localhost:8080` for the dashboard.
 docker run -d --name traffic-server \
   -p 80:80 -p 443:443 -p 5201:5201 -p 5201:5201/udp \
   -p 9999:9999 -p 9998:9998/udp \
-  -p 21:21 -p 21100-21110:21100-21110 -p 22:22 \
+  -p 21:21 -p 21100-21110:21100-21110 -p 2222:22 \
   --restart unless-stopped \
   ajaymare/traffic-gen-server:latest
 ```
