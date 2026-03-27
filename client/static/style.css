@@ -100,7 +100,10 @@ body {
     justify-content: space-between;
     margin-bottom: 10px;
 }
+.proto-select { display: flex; align-items: center; gap: 8px; }
+.proto-checkbox { width: 16px; height: 16px; accent-color: #38bdf8; cursor: pointer; }
 .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #38bdf8; }
+.bulk-actions { display: flex; gap: 6px; }
 .proto-badge {
     font-size: 11px;
     padding: 2px 8px;

@@ -108,7 +108,10 @@ function renderProtocolCards() {
         grid.innerHTML += `
             <div class="proto-card" id="proto-${proto}">
                 <div class="proto-header">
-                    <span class="proto-name">${def.name}</span>
+                    <span class="proto-select">
+                        <input type="checkbox" id="select-${proto}" class="proto-checkbox">
+                        <span class="proto-name">${def.name}</span>
+                    </span>
                     <span>
                         <span class="proto-badge" id="status-${proto}">Stopped</span>
                         <span class="proto-badge countdown" id="timer-${proto}" style="display:none"></span>
@@ -159,6 +162,43 @@ async function stopProto(proto) {
 async function stopAll() {
     await apiPost('/api/stop', { protocol: 'all' });
     addLog('[ALL] Stopping all traffic');
+}
+
+function getSelectedProtos() {
+    return Object.keys(PROTOCOLS).filter(p =>
+        document.getElementById(`select-${p}`).checked
+    );
+}
+
+function selectAll() {
+    Object.keys(PROTOCOLS).forEach(p =>
+        document.getElementById(`select-${p}`).checked = true
+    );
+}
+
+function deselectAll() {
+    Object.keys(PROTOCOLS).forEach(p =>
+        document.getElementById(`select-${p}`).checked = false
+    );
+}
+
+async function startSelected() {
+    const selected = getSelectedProtos();
+    if (selected.length === 0) { addLog('[WARN] No protocols selected'); return; }
+    for (const proto of selected) {
+        const config = getConfig(proto);
+        const res = await apiPost('/api/start', { protocol: proto, config });
+        addLog(`[${proto.toUpperCase()}] ${res.message}`);
+    }
+}
+
+async function stopSelected() {
+    const selected = getSelectedProtos();
+    if (selected.length === 0) { addLog('[WARN] No protocols selected'); return; }
+    for (const proto of selected) {
+        const res = await apiPost('/api/stop', { protocol: proto });
+        addLog(`[${proto.toUpperCase()}] ${res.message}`);
+    }
 }
 
 // ─── Shaping ───────────────────────────────────────────────
