@@ -9,6 +9,7 @@ const PROTOCOLS = {
             { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
         ]
     },
@@ -21,6 +22,7 @@ const PROTOCOLS = {
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
         ]
     },
@@ -33,6 +35,7 @@ const PROTOCOLS = {
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
             { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
             { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
         ]
     },
@@ -45,6 +48,7 @@ const PROTOCOLS = {
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
             { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
             { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
         ]
     },
@@ -56,6 +60,7 @@ const PROTOCOLS = {
             { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
             { key: 'password', label: 'Password', type: 'text', default: '' },
             { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
+            { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 300 },
         ]
     },

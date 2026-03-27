@@ -4,6 +4,7 @@ Each job runs in a background thread with a configurable duration.
 """
 import os
 import time
+import random
 import socket
 import ftplib
 import logging
@@ -141,22 +142,31 @@ class TrafficEngine:
         verify_ssl = not cfg.get('ignore_ssl', False)
         data_size_kb = int(cfg.get('data_size_kb', 0))
         upload = cfg.get('upload', False)
+        random_size = cfg.get('random_size', False)
 
-        job.log(f"{method} {url} interval={interval}s verify_ssl={verify_ssl}")
+        job.log(f"{method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
         session = requests.Session()
 
         while not job.should_stop():
             try:
-                if upload and data_size_kb > 0:
-                    data = os.urandom(data_size_kb * 1024)
+                cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
+
+                if upload and cur_size_kb > 0:
+                    data = os.urandom(cur_size_kb * 1024)
                     resp = session.post(url, data=data, verify=verify_ssl, timeout=30)
                     job.stats['bytes_sent'] += len(data)
                 elif method == 'GET':
-                    resp = session.get(url, verify=verify_ssl, timeout=60, stream=True)
+                    if random_size:
+                        rand_mb = random.randint(1, 100)
+                        base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
+                        cur_url = f"{base}/generate/{rand_mb}"
+                    else:
+                        cur_url = url
+                    resp = session.get(cur_url, verify=verify_ssl, timeout=60, stream=True)
                     content = resp.content
                     job.stats['bytes_recv'] += len(content)
                 else:
-                    data = os.urandom(data_size_kb * 1024) if data_size_kb > 0 else b''
+                    data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
                     resp = session.request(method, url, data=data, verify=verify_ssl, timeout=30)
                     job.stats['bytes_sent'] += len(data)
                     job.stats['bytes_recv'] += len(resp.content)
@@ -178,12 +188,13 @@ class TrafficEngine:
         port = int(cfg.get('port', 9999))
         msg_size = int(cfg.get('msg_size', 1024))
         interval = float(cfg.get('interval', 0.5))
+        random_size = cfg.get('random_size', False)
 
         if cfg.get('use_iperf', False):
             self._run_iperf(job, host, 'tcp')
             return
 
-        job.log(f"TCP echo {host}:{port} msg_size={msg_size}")
+        job.log(f"TCP echo {host}:{port} msg_size={msg_size} random_size={random_size}")
 
         while not job.should_stop():
             try:
@@ -193,7 +204,8 @@ class TrafficEngine:
                 job.log(f"Connected to {host}:{port}")
 
                 while not job.should_stop():
-                    data = os.urandom(msg_size)
+                    cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
+                    data = os.urandom(cur_size)
                     sock.sendall(data)
                     job.stats['bytes_sent'] += len(data)
                     resp = sock.recv(65536)
@@ -216,18 +228,20 @@ class TrafficEngine:
         port = int(cfg.get('port', 9998))
         msg_size = int(cfg.get('msg_size', 1024))
         interval = float(cfg.get('interval', 0.5))
+        random_size = cfg.get('random_size', False)
 
         if cfg.get('use_iperf', False):
             self._run_iperf(job, host, 'udp')
             return
 
-        job.log(f"UDP echo {host}:{port} msg_size={msg_size}")
+        job.log(f"UDP echo {host}:{port} msg_size={msg_size} random_size={random_size}")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)
 
         while not job.should_stop():
             try:
-                data = os.urandom(msg_size)
+                cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
+                data = os.urandom(cur_size)
                 sock.sendto(data, (host, port))
                 job.stats['bytes_sent'] += len(data)
                 resp, _ = sock.recvfrom(65536)
@@ -310,8 +324,10 @@ class TrafficEngine:
         username = cfg.get('username', 'anonymous')
         password = cfg.get('password', '')
         filename = cfg.get('filename', 'testfile_1gb.bin')
+        random_size = cfg.get('random_size', False)
+        ftp_files = ['testfile_100mb.bin', 'testfile_1gb.bin']
 
-        job.log(f"FTP continuous download {filename} from {host}:{port}")
+        job.log(f"FTP continuous download from {host}:{port} random_size={random_size}")
 
         while not job.should_stop():
             try:
@@ -320,8 +336,9 @@ class TrafficEngine:
                 ftp.login(username, password)
                 ftp.set_pasv(True)
 
-                size = ftp.size(filename) or 0
-                job.log(f"Connected — downloading {filename} ({size} bytes)")
+                cur_file = random.choice(ftp_files) if random_size else filename
+                size = ftp.size(cur_file) or 0
+                job.log(f"Connected — downloading {cur_file} ({size} bytes)")
 
                 bytes_recv = 0
 
@@ -333,7 +350,7 @@ class TrafficEngine:
                     job.stats['bytes_recv'] += len(data)
 
                 try:
-                    ftp.retrbinary(f'RETR {filename}', callback, blocksize=65536)
+                    ftp.retrbinary(f'RETR {cur_file}', callback, blocksize=65536)
                 except StopIteration:
                     pass
 
