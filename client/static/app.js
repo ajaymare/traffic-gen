@@ -308,10 +308,25 @@ function addLog(msg) {
     panel.scrollTop = panel.scrollHeight;
 }
 
+// ─── Shaping restore ────────────────────────────────────────
+
+async function loadShaping() {
+    try {
+        const resp = await fetch('/api/shaping/current');
+        const data = await resp.json();
+        document.getElementById('latency').value = data.latency_ms;
+        document.getElementById('jitter').value = data.jitter_ms;
+        document.getElementById('loss').value = data.packet_loss_pct;
+        document.getElementById('bandwidth').value = data.bandwidth_mbps;
+        ['latency', 'jitter', 'loss', 'bandwidth'].forEach(updateSlider);
+    } catch (e) { /* ignore */ }
+}
+
 // ─── Init ──────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
+    loadShaping();
     setInterval(pollStatus, 2000);
     pollStatus();
     addLog('Dashboard ready.');

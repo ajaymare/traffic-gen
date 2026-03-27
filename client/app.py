@@ -14,6 +14,9 @@ engine = TrafficEngine()
 
 SERVER_HOST = os.environ.get('SERVER_HOST', 'server')
 
+# Store current shaping settings so they persist across page refreshes
+current_shaping = {"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0}
+
 
 @app.route('/')
 def dashboard():
@@ -65,15 +68,22 @@ def apply_shaping():
     loss = float(d.get('packet_loss_pct', 0))
     bw = int(d.get('bandwidth_mbps', 0))
     network_shaper.apply_shaping(latency, jitter, loss, bw)
+    current_shaping.update({"latency_ms": latency, "jitter_ms": jitter,
+                            "packet_loss_pct": loss, "bandwidth_mbps": bw})
     return jsonify({"ok": True, "message": "Shaping applied",
-                    "settings": {"latency_ms": latency, "jitter_ms": jitter,
-                                 "packet_loss_pct": loss, "bandwidth_mbps": bw}})
+                    "settings": current_shaping})
 
 
 @app.route('/api/shaping/clear', methods=['POST'])
 def clear_shaping():
     network_shaper.clear_all()
+    current_shaping.update({"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0})
     return jsonify({"ok": True, "message": "Shaping cleared"})
+
+
+@app.route('/api/shaping/current')
+def get_shaping():
+    return jsonify(current_shaping)
 
 
 if __name__ == '__main__':
