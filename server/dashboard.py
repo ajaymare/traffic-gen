@@ -1,18 +1,45 @@
-"""Server-side dashboard showing incoming traffic stats."""
+"""Server-side dashboard with tabs: Server stats + multi-client control."""
 import json
+import os
 import subprocess
-import time
-from flask import Flask, jsonify, render_template_string
+import threading
+
+import requests as http_client
+from flask import Flask, jsonify, request, render_template_string
 
 app = Flask(__name__)
 
-DASHBOARD_HTML = """
+# ─── Client Registry ────────────────────────────────────────
+CLIENTS_FILE = '/tmp/clients.json'
+clients_lock = threading.Lock()
+clients = {}  # name -> url
+
+
+def load_clients():
+    global clients
+    try:
+        with open(CLIENTS_FILE) as f:
+            clients = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        clients = {}
+
+
+def save_clients():
+    with open(CLIENTS_FILE, 'w') as f:
+        json.dump(clients, f)
+
+
+load_clients()
+
+# ─── Dashboard HTML ──────────────────────────────────────────
+
+DASHBOARD_HTML = r"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Server Dashboard</title>
+    <title>Traffic Generator — Control Panel</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -26,8 +53,33 @@ DASHBOARD_HTML = """
         }
         .header h1 { font-size: 20px; font-weight: 600; color: #f97316; }
         .header .status { font-size: 12px; color: #94a3b8; }
+
+        /* Tabs */
+        .tab-bar {
+            background: #1e293b; border-bottom: 1px solid #475569;
+            display: flex; align-items: center; padding: 0 16px; gap: 0;
+            overflow-x: auto;
+        }
+        .tab {
+            padding: 10px 20px; cursor: pointer; font-size: 13px; font-weight: 500;
+            color: #94a3b8; border-bottom: 2px solid transparent;
+            white-space: nowrap; transition: all 0.2s;
+        }
+        .tab:hover { color: #e2e8f0; background: #334155; }
+        .tab.active { color: #f97316; border-bottom-color: #f97316; }
+        .tab.server-tab { color: #38bdf8; }
+        .tab.server-tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+        .tab-add {
+            padding: 6px 14px; cursor: pointer; font-size: 16px; font-weight: 700;
+            color: #22c55e; border: 1px solid #22c55e; border-radius: 4px;
+            background: transparent; margin-left: 8px;
+        }
+        .tab-add:hover { background: #22c55e; color: #fff; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
         .container {
-            max-width: 1200px; margin: 0 auto; padding: 20px;
+            max-width: 1400px; margin: 0 auto; padding: 20px;
             display: flex; flex-direction: column; gap: 20px;
         }
         .card {
@@ -37,17 +89,21 @@ DASHBOARD_HTML = """
         .card-header {
             padding: 12px 16px; background: #334155;
             font-weight: 600; font-size: 14px;
+            display: flex; align-items: center; justify-content: space-between;
         }
         .card-body { padding: 16px; }
-        .stats-grid {
-            display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-        }
+
+        /* Stats */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .stat-box {
             background: #0f172a; border: 1px solid #334155;
             border-radius: 6px; padding: 10px; text-align: center;
         }
         .stat-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
         .stat-value { font-size: 16px; font-weight: 700; color: #f97316; }
+        .stat-value.client-val { color: #38bdf8; }
+
+        /* Services grid */
         .services-grid {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
         }
@@ -60,9 +116,7 @@ DASHBOARD_HTML = """
             margin-bottom: 8px;
         }
         .service-name { font-weight: 600; font-size: 14px; color: #f97316; text-transform: uppercase; }
-        .service-badge {
-            font-size: 11px; padding: 2px 8px; border-radius: 10px;
-        }
+        .service-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
         .service-badge.active { background: #166534; color: #86efac; }
         .service-badge.idle { background: #475569; color: #94a3b8; }
         .service-stat {
@@ -71,9 +125,9 @@ DASHBOARD_HTML = """
         }
         .service-stat-label { color: #94a3b8; }
         .service-stat-value { color: #e2e8f0; font-weight: 500; }
-        .connections-table {
-            width: 100%; border-collapse: collapse; font-size: 12px;
-        }
+
+        /* Connections table */
+        .connections-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .connections-table th {
             text-align: left; padding: 6px 8px; background: #0f172a;
             color: #94a3b8; font-weight: 500; border-bottom: 1px solid #334155;
@@ -82,20 +136,114 @@ DASHBOARD_HTML = """
             padding: 5px 8px; border-bottom: 1px solid #1e293b; color: #e2e8f0;
         }
         .connections-table tr:hover td { background: #334155; }
+
+        /* Protocol cards (client tabs) */
+        .protocol-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
+        }
+        .proto-card {
+            background: #0f172a; border: 1px solid #334155;
+            border-radius: 6px; padding: 12px;
+        }
+        .proto-card.running { border-color: #22c55e; }
+        .proto-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .proto-select { display: flex; align-items: center; gap: 8px; }
+        .proto-checkbox { width: 16px; height: 16px; accent-color: #38bdf8; cursor: pointer; }
+        .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #38bdf8; }
+        .proto-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #475569; }
+        .proto-badge.running { background: #166534; color: #86efac; }
+        .proto-badge.countdown { background: #854d0e; color: #fde68a; font-variant-numeric: tabular-nums; }
+        .proto-fields { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .field-row { display: flex; align-items: center; gap: 8px; }
+        .field-row label { font-size: 12px; color: #94a3b8; min-width: 90px; }
+        .field-row input, .field-row select {
+            flex: 1; padding: 4px 8px; background: #1e293b;
+            border: 1px solid #475569; border-radius: 4px;
+            color: #e2e8f0; font-size: 12px;
+        }
+        .field-row input[type="checkbox"] { flex: none; width: 16px; height: 16px; }
+        .proto-actions { display: flex; gap: 6px; }
+        .bulk-actions { display: flex; gap: 6px; }
+
+        /* Shaping */
+        .shaping-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+        .slider-group { display: flex; flex-direction: column; gap: 4px; }
+        .slider-group label {
+            font-size: 12px; color: #94a3b8;
+            display: flex; justify-content: space-between;
+        }
+        .slider-group input[type="range"] { width: 100%; accent-color: #38bdf8; }
+        .slider-value { color: #38bdf8; font-weight: 600; }
+        .shaping-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
+
+        /* Buttons */
+        .btn {
+            padding: 6px 14px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 12px; font-weight: 500;
+        }
+        .btn-start { background: #22c55e; color: #052e16; }
+        .btn-start:hover { background: #16a34a; }
+        .btn-stop { background: #ef4444; color: #fff; }
+        .btn-stop:hover { background: #dc2626; }
+        .btn-primary { background: #3b82f6; color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-secondary { background: #475569; color: #e2e8f0; }
+        .btn-secondary:hover { background: #64748b; }
+        .btn-danger { background: #ef4444; color: #fff; }
+
+        /* Log panel */
+        .log-panel {
+            background: #020617; border: 1px solid #334155; border-radius: 4px;
+            padding: 8px; font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px; max-height: 300px; overflow-y: auto; line-height: 1.6;
+        }
+        .log-entry { color: #94a3b8; white-space: pre-wrap; word-break: break-all; }
+        .log-entry.error { color: #ef4444; }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: #1e293b; border: 1px solid #475569; border-radius: 8px;
+            padding: 24px; width: 400px; max-width: 90vw;
+        }
+        .modal h3 { margin-bottom: 16px; color: #f97316; }
+        .modal-field { margin-bottom: 12px; }
+        .modal-field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+        .modal-field input {
+            width: 100%; padding: 8px; background: #0f172a; border: 1px solid #475569;
+            border-radius: 4px; color: #e2e8f0; font-size: 13px;
+        }
+        .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
         @media (max-width: 900px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .shaping-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <h1>Traffic Server Dashboard</h1>
+    <h1>Traffic Generator — Control Panel</h1>
     <div class="status">Auto-refresh: 2s | <span id="last-update">--</span></div>
 </div>
 
+<!-- Tab Bar -->
+<div class="tab-bar" id="tab-bar">
+    <div class="tab server-tab active" onclick="switchTab('server')">Server</div>
+    <button class="tab-add" onclick="showAddClient()" title="Add Client">+</button>
+</div>
+
+<!-- Server Tab -->
+<div class="tab-content active" id="tab-server">
 <div class="container">
-    <!-- Aggregate Stats -->
     <div class="card">
         <div class="card-header">Aggregate Traffic</div>
         <div class="card-body">
@@ -107,23 +255,15 @@ DASHBOARD_HTML = """
             </div>
         </div>
     </div>
-
-    <!-- Per-Service Stats -->
     <div class="card">
         <div class="card-header">Services</div>
-        <div class="card-body">
-            <div class="services-grid" id="services-grid"></div>
-        </div>
+        <div class="card-body"><div class="services-grid" id="services-grid"></div></div>
     </div>
-
-    <!-- Active Connections -->
     <div class="card">
         <div class="card-header">Active Connections</div>
         <div class="card-body">
             <table class="connections-table">
-                <thead>
-                    <tr><th>Protocol</th><th>Local Port</th><th>Remote Address</th><th>State</th></tr>
-                </thead>
+                <thead><tr><th>Protocol</th><th>Local Port</th><th>Remote Address</th><th>State</th></tr></thead>
                 <tbody id="conn-table-body">
                     <tr><td colspan="4" style="text-align:center;color:#94a3b8">Loading...</td></tr>
                 </tbody>
@@ -131,27 +271,387 @@ DASHBOARD_HTML = """
         </div>
     </div>
 </div>
+</div>
+
+<!-- Add Client Modal -->
+<div class="modal-overlay" id="add-client-modal">
+    <div class="modal">
+        <h3>Add Client</h3>
+        <div class="modal-field">
+            <label>Client Name</label>
+            <input type="text" id="client-name" placeholder="e.g. client-1">
+        </div>
+        <div class="modal-field">
+            <label>Client URL</label>
+            <input type="text" id="client-url" placeholder="e.g. http://192.168.1.10:8080">
+        </div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="hideAddClient()">Cancel</button>
+            <button class="btn btn-start" onclick="addClient()">Add</button>
+        </div>
+    </div>
+</div>
 
 <script>
+// ─── Protocol Definitions ────────────────────────────────────
+const PROTOCOLS = {
+    http: { name: 'HTTP', fields: [
+        { key: 'url', label: 'URL', type: 'text', default: 'http://server/generate/100' },
+        { key: 'method', label: 'Method', type: 'select', options: ['GET','POST'], default: 'GET' },
+        { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+        { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+    https: { name: 'HTTPS', fields: [
+        { key: 'url', label: 'URL', type: 'text', default: 'https://server/' },
+        { key: 'method', label: 'Method', type: 'select', options: ['GET','POST'], default: 'GET' },
+        { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+        { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
+        { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+    tcp: { name: 'TCP', fields: [
+        { key: 'host', label: 'Host', type: 'text', default: 'server' },
+        { key: 'port', label: 'Port', type: 'number', default: 9999 },
+        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+        { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
+        { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+    udp: { name: 'UDP', fields: [
+        { key: 'host', label: 'Host', type: 'text', default: 'server' },
+        { key: 'port', label: 'Port', type: 'number', default: 9998 },
+        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+        { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
+        { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+    ftp: { name: 'FTP', fields: [
+        { key: 'host', label: 'Host', type: 'text', default: 'server' },
+        { key: 'port', label: 'Port', type: 'number', default: 21 },
+        { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
+        { key: 'password', label: 'Password', type: 'text', default: '' },
+        { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
+        { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 300 },
+    ]},
+    ssh: { name: 'SSH', fields: [
+        { key: 'host', label: 'Host', type: 'text', default: 'server' },
+        { key: 'port', label: 'Port', type: 'number', default: 22 },
+        { key: 'username', label: 'Username', type: 'text', default: 'testuser' },
+        { key: 'password', label: 'Password', type: 'text', default: 'testpass' },
+        { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+    icmp: { name: 'ICMP (Ping)', fields: [
+        { key: 'host', label: 'Host', type: 'text', default: 'server' },
+        { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
+};
+
+let activeTab = 'server';
+let clientList = {};
+let clientLogs = {};
+let pollInterval = null;
+
+// ─── Helpers ──────────────────────────────────────────────────
 function fmtBytes(b) {
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
     if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
     return (b / 1073741824).toFixed(2) + ' GB';
 }
+function fmtTime(s) {
+    if (s < 0) return '--';
+    const m = Math.floor(s / 60); const sec = s % 60;
+    return m > 0 ? m + 'm ' + sec + 's' : sec + 's';
+}
+async function apiPost(url, body) {
+    const r = await fetch(url, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+    });
+    return r.json();
+}
 
-async function poll() {
+function addClientLog(name, msg) {
+    if (!clientLogs[name]) clientLogs[name] = [];
+    clientLogs[name].push('[' + new Date().toLocaleTimeString() + '] ' + msg);
+    if (clientLogs[name].length > 300) clientLogs[name].splice(0, 150);
+    const panel = document.getElementById('log-' + name);
+    if (panel) {
+        panel.innerHTML = clientLogs[name].map(l => {
+            const cls = l.includes('rror') ? ' error' : '';
+            const d = document.createElement('div');
+            d.textContent = l;
+            return '<div class="log-entry' + cls + '">' + d.innerHTML + '</div>';
+        }).join('');
+        panel.scrollTop = panel.scrollHeight;
+    }
+}
+
+// ─── Tab Management ──────────────────────────────────────────
+function switchTab(name) {
+    activeTab = name;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    const tab = document.querySelector('.tab[data-tab="' + name + '"]');
+    if (tab) tab.classList.add('active');
+    const content = document.getElementById('tab-' + name);
+    if (content) content.classList.add('active');
+}
+
+function rebuildTabs() {
+    const bar = document.getElementById('tab-bar');
+    bar.innerHTML = '<div class="tab server-tab' + (activeTab === 'server' ? ' active' : '') +
+        '" data-tab="server" onclick="switchTab(\'server\')">Server</div>';
+    for (const name of Object.keys(clientList)) {
+        bar.innerHTML += '<div class="tab' + (activeTab === name ? ' active' : '') +
+            '" data-tab="' + name + '" onclick="switchTab(\'' + name + '\')">' + name + '</div>';
+    }
+    bar.innerHTML += '<button class="tab-add" onclick="showAddClient()" title="Add Client">+</button>';
+}
+
+// ─── Client Tab Rendering ────────────────────────────────────
+function renderClientTab(name) {
+    const existing = document.getElementById('tab-' + name);
+    if (existing) return;
+
+    const div = document.createElement('div');
+    div.className = 'tab-content';
+    div.id = 'tab-' + name;
+
+    let protoCardsHtml = '';
+    for (const [proto, def] of Object.entries(PROTOCOLS)) {
+        let fieldsHtml = '';
+        for (const f of def.fields) {
+            let input;
+            const id = 'c-' + name + '-' + proto + '-' + f.key;
+            if (f.type === 'select') {
+                const opts = f.options.map(o =>
+                    '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>').join('');
+                input = '<select id="' + id + '">' + opts + '</select>';
+            } else if (f.type === 'checkbox') {
+                input = '<input type="checkbox" id="' + id + '"' + (f.default ? ' checked' : '') + '>';
+            } else {
+                const step = f.step ? ' step="' + f.step + '"' : '';
+                input = '<input type="' + f.type + '" id="' + id + '" value="' + f.default + '"' + step + '>';
+            }
+            fieldsHtml += '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
+        }
+        protoCardsHtml += '<div class="proto-card" id="c-' + name + '-proto-' + proto + '">' +
+            '<div class="proto-header"><span class="proto-select">' +
+            '<input type="checkbox" id="c-' + name + '-select-' + proto + '" class="proto-checkbox">' +
+            '<span class="proto-name">' + def.name + '</span></span>' +
+            '<span><span class="proto-badge" id="c-' + name + '-status-' + proto + '">Stopped</span>' +
+            '<span class="proto-badge countdown" id="c-' + name + '-timer-' + proto + '" style="display:none"></span>' +
+            '</span></div>' +
+            '<div class="proto-fields">' + fieldsHtml + '</div>' +
+            '<div class="proto-actions">' +
+            '<button class="btn btn-start" onclick="clientStartProto(\'' + name + '\',\'' + proto + '\')">Start</button>' +
+            '<button class="btn btn-stop" onclick="clientStopProto(\'' + name + '\',\'' + proto + '\')">Stop</button>' +
+            '</div></div>';
+    }
+
+    div.innerHTML = '<div class="container">' +
+        // Client header with remove button
+        '<div class="card"><div class="card-header">' +
+        '<span>Client: ' + name + ' (' + clientList[name] + ')</span>' +
+        '<button class="btn btn-danger" onclick="removeClient(\'' + name + '\')">Remove Client</button>' +
+        '</div></div>' +
+        // Stats
+        '<div class="card"><div class="card-header">Live Statistics</div><div class="card-body">' +
+        '<div class="stats-grid">' +
+        '<div class="stat-box"><div class="stat-label">Bytes Sent</div><div class="stat-value client-val" id="c-' + name + '-sent">0 B</div></div>' +
+        '<div class="stat-box"><div class="stat-label">Bytes Received</div><div class="stat-value client-val" id="c-' + name + '-recv">0 B</div></div>' +
+        '<div class="stat-box"><div class="stat-label">Requests</div><div class="stat-value client-val" id="c-' + name + '-reqs">0</div></div>' +
+        '<div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value client-val" id="c-' + name + '-errors">0</div></div>' +
+        '</div></div></div>' +
+        // Shaping
+        '<div class="card"><div class="card-header">Network Impairment (tc/netem)</div><div class="card-body">' +
+        '<div class="shaping-grid">' +
+        '<div class="slider-group"><label>Latency <span class="slider-value" id="c-' + name + '-latency-val">0</span> ms</label>' +
+        '<input type="range" id="c-' + name + '-latency" min="0" max="500" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'latency\')"></div>' +
+        '<div class="slider-group"><label>Jitter <span class="slider-value" id="c-' + name + '-jitter-val">0</span> ms</label>' +
+        '<input type="range" id="c-' + name + '-jitter" min="0" max="200" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'jitter\')"></div>' +
+        '<div class="slider-group"><label>Packet Loss <span class="slider-value" id="c-' + name + '-loss-val">0</span> %</label>' +
+        '<input type="range" id="c-' + name + '-loss" min="0" max="50" value="0" step="0.5" oninput="clientUpdateSlider(\'' + name + '\',\'loss\')"></div>' +
+        '<div class="slider-group"><label>Bandwidth <span class="slider-value" id="c-' + name + '-bandwidth-val">0</span> Mbps (0=unlimited)</label>' +
+        '<input type="range" id="c-' + name + '-bandwidth" min="0" max="100" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
+        '</div><div class="shaping-actions">' +
+        '<button class="btn btn-primary" onclick="clientApplyShaping(\'' + name + '\')">Apply Shaping</button>' +
+        '<button class="btn btn-secondary" onclick="clientClearShaping(\'' + name + '\')">Clear All</button>' +
+        '</div></div></div>' +
+        // Protocol cards
+        '<div class="card"><div class="card-header"><span>Traffic Generators</span>' +
+        '<div class="bulk-actions">' +
+        '<button class="btn btn-secondary" onclick="clientSelectAll(\'' + name + '\')">Select All</button>' +
+        '<button class="btn btn-secondary" onclick="clientDeselectAll(\'' + name + '\')">Deselect All</button>' +
+        '<button class="btn btn-start" onclick="clientStartSelected(\'' + name + '\')">Start Selected</button>' +
+        '<button class="btn btn-stop" onclick="clientStopSelected(\'' + name + '\')">Stop Selected</button>' +
+        '<button class="btn btn-danger" onclick="clientStopAll(\'' + name + '\')">Stop All</button>' +
+        '</div></div><div class="card-body"><div class="protocol-grid">' + protoCardsHtml + '</div></div></div>' +
+        // Log
+        '<div class="card"><div class="card-header">Activity Log ' +
+        '<button class="btn btn-secondary" onclick="clientLogs[\'' + name + '\']=[];document.getElementById(\'log-' + name + '\').innerHTML=\'\'">Clear</button>' +
+        '</div><div class="card-body"><div class="log-panel" id="log-' + name + '"></div></div></div>' +
+        '</div>';
+
+    document.body.appendChild(div);
+}
+
+// ─── Client Actions ──────────────────────────────────────────
+function clientGetConfig(clientName, proto) {
+    const cfg = {};
+    for (const f of PROTOCOLS[proto].fields) {
+        const el = document.getElementById('c-' + clientName + '-' + proto + '-' + f.key);
+        if (!el) continue;
+        if (f.type === 'checkbox') cfg[f.key] = el.checked;
+        else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
+        else cfg[f.key] = el.value;
+    }
+    return cfg;
+}
+
+async function clientStartProto(clientName, proto) {
+    const config = clientGetConfig(clientName, proto);
+    const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config });
+    addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+}
+
+async function clientStopProto(clientName, proto) {
+    const res = await apiPost('/api/client/' + clientName + '/stop', { protocol: proto });
+    addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+}
+
+async function clientStopAll(clientName) {
+    await apiPost('/api/client/' + clientName + '/stop', { protocol: 'all' });
+    addClientLog(clientName, '[ALL] Stopping all traffic');
+}
+
+function clientSelectAll(clientName) {
+    Object.keys(PROTOCOLS).forEach(p => {
+        const el = document.getElementById('c-' + clientName + '-select-' + p);
+        if (el) el.checked = true;
+    });
+}
+function clientDeselectAll(clientName) {
+    Object.keys(PROTOCOLS).forEach(p => {
+        const el = document.getElementById('c-' + clientName + '-select-' + p);
+        if (el) el.checked = false;
+    });
+}
+async function clientStartSelected(clientName) {
+    const selected = Object.keys(PROTOCOLS).filter(p =>
+        document.getElementById('c-' + clientName + '-select-' + p)?.checked);
+    if (!selected.length) { addClientLog(clientName, '[WARN] No protocols selected'); return; }
+    for (const proto of selected) {
+        const config = clientGetConfig(clientName, proto);
+        const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config });
+        addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || ''));
+    }
+}
+async function clientStopSelected(clientName) {
+    const selected = Object.keys(PROTOCOLS).filter(p =>
+        document.getElementById('c-' + clientName + '-select-' + p)?.checked);
+    if (!selected.length) { addClientLog(clientName, '[WARN] No protocols selected'); return; }
+    for (const proto of selected) {
+        const res = await apiPost('/api/client/' + clientName + '/stop', { protocol: proto });
+        addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || ''));
+    }
+}
+
+function clientUpdateSlider(clientName, id) {
+    const el = document.getElementById('c-' + clientName + '-' + id);
+    const val = document.getElementById('c-' + clientName + '-' + id + '-val');
+    if (el && val) val.textContent = el.value;
+}
+
+async function clientApplyShaping(clientName) {
+    const body = {
+        latency_ms: parseInt(document.getElementById('c-' + clientName + '-latency').value),
+        jitter_ms: parseInt(document.getElementById('c-' + clientName + '-jitter').value),
+        packet_loss_pct: parseFloat(document.getElementById('c-' + clientName + '-loss').value),
+        bandwidth_mbps: parseInt(document.getElementById('c-' + clientName + '-bandwidth').value),
+    };
+    const res = await apiPost('/api/client/' + clientName + '/shaping', body);
+    addClientLog(clientName, '[SHAPING] ' + (res.message || ''));
+}
+
+async function clientClearShaping(clientName) {
+    await apiPost('/api/client/' + clientName + '/shaping/clear', {});
+    ['latency','jitter','loss','bandwidth'].forEach(id => {
+        const el = document.getElementById('c-' + clientName + '-' + id);
+        if (el) { el.value = 0; clientUpdateSlider(clientName, id); }
+    });
+    addClientLog(clientName, '[SHAPING] Cleared');
+}
+
+async function clientLoadShaping(clientName) {
+    try {
+        const resp = await fetch('/api/client/' + clientName + '/shaping/current');
+        const data = await resp.json();
+        if (data.latency_ms !== undefined) {
+            document.getElementById('c-' + clientName + '-latency').value = data.latency_ms;
+            document.getElementById('c-' + clientName + '-jitter').value = data.jitter_ms;
+            document.getElementById('c-' + clientName + '-loss').value = data.packet_loss_pct;
+            document.getElementById('c-' + clientName + '-bandwidth').value = data.bandwidth_mbps;
+            ['latency','jitter','loss','bandwidth'].forEach(id => clientUpdateSlider(clientName, id));
+        }
+    } catch(e) {}
+}
+
+// ─── Client Status Polling ───────────────────────────────────
+async function pollClientStatus(clientName) {
+    try {
+        const resp = await fetch('/api/client/' + clientName + '/status');
+        const data = await resp.json();
+        if (data.error) return;
+        let totSent=0, totRecv=0, totReqs=0, totErrs=0;
+        for (const [proto, info] of Object.entries(data.jobs || {})) {
+            const card = document.getElementById('c-' + clientName + '-proto-' + proto);
+            const badge = document.getElementById('c-' + clientName + '-status-' + proto);
+            const timer = document.getElementById('c-' + clientName + '-timer-' + proto);
+            if (!card) continue;
+            if (info.running) {
+                card.classList.add('running'); badge.classList.add('running');
+                badge.textContent = 'Running';
+                timer.style.display = '';
+                timer.textContent = info.remaining >= 0 ? fmtTime(info.remaining) : fmtTime(info.elapsed);
+            } else {
+                card.classList.remove('running'); badge.classList.remove('running');
+                badge.textContent = 'Stopped'; timer.style.display = 'none';
+            }
+            totSent += info.stats.bytes_sent; totRecv += info.stats.bytes_recv;
+            totReqs += info.stats.requests; totErrs += info.stats.errors;
+        }
+        const el = id => document.getElementById('c-' + clientName + '-' + id);
+        if (el('sent')) el('sent').textContent = fmtBytes(totSent);
+        if (el('recv')) el('recv').textContent = fmtBytes(totRecv);
+        if (el('reqs')) el('reqs').textContent = totReqs.toLocaleString();
+        if (el('errors')) el('errors').textContent = totErrs.toLocaleString();
+    } catch(e) {}
+}
+
+// ─── Server Status Polling ───────────────────────────────────
+async function pollServerStatus() {
     try {
         const resp = await fetch('/api/server-stats');
         const data = await resp.json();
-
-        // Aggregate
         document.getElementById('total-recv').textContent = fmtBytes(data.aggregate.bytes_recv);
         document.getElementById('total-sent').textContent = fmtBytes(data.aggregate.bytes_sent);
         document.getElementById('total-reqs').textContent = data.aggregate.requests.toLocaleString();
         document.getElementById('total-conns').textContent = data.aggregate.active_connections;
-
-        // Services
         const grid = document.getElementById('services-grid');
         grid.innerHTML = '';
         for (const [name, svc] of Object.entries(data.services)) {
@@ -159,7 +659,6 @@ async function poll() {
             const badge = active
                 ? '<span class="service-badge active">' + svc.active_connections + ' conn</span>'
                 : '<span class="service-badge idle">Idle</span>';
-
             let statsHtml = '';
             for (const [k, v] of Object.entries(svc.stats)) {
                 const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -167,33 +666,88 @@ async function poll() {
                 statsHtml += '<div class="service-stat"><span class="service-stat-label">' +
                     label + '</span><span class="service-stat-value">' + val + '</span></div>';
             }
-
             grid.innerHTML += '<div class="service-card"><div class="service-header">' +
                 '<span class="service-name">' + name + '</span>' + badge +
                 '</div>' + statsHtml + '</div>';
         }
-
-        // Connections table
         const tbody = document.getElementById('conn-table-body');
-        if (data.connections.length === 0) {
+        if (!data.connections.length) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8">No active connections</td></tr>';
         } else {
             tbody.innerHTML = data.connections.map(c =>
                 '<tr><td>' + c.proto + '</td><td>' + c.local_port + '</td><td>' +
-                c.remote + '</td><td>' + c.state + '</td></tr>'
-            ).join('');
+                c.remote + '</td><td>' + c.state + '</td></tr>').join('');
         }
-
         document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-    } catch (e) { /* ignore */ }
+    } catch(e) {}
 }
 
-setInterval(poll, 2000);
-poll();
+// ─── Polling Loop ────────────────────────────────────────────
+async function pollAll() {
+    if (activeTab === 'server') {
+        await pollServerStatus();
+    } else if (clientList[activeTab]) {
+        await pollClientStatus(activeTab);
+    }
+}
+
+// ─── Client Management ──────────────────────────────────────
+function showAddClient() { document.getElementById('add-client-modal').classList.add('show'); }
+function hideAddClient() { document.getElementById('add-client-modal').classList.remove('show'); }
+
+async function addClient() {
+    const name = document.getElementById('client-name').value.trim();
+    const url = document.getElementById('client-url').value.trim();
+    if (!name || !url) return;
+    const res = await apiPost('/api/clients', { name, url });
+    if (res.ok) {
+        clientList[name] = url;
+        renderClientTab(name);
+        rebuildTabs();
+        hideAddClient();
+        document.getElementById('client-name').value = '';
+        document.getElementById('client-url').value = '';
+        clientLoadShaping(name);
+        switchTab(name);
+    }
+}
+
+async function removeClient(name) {
+    if (!confirm('Remove client "' + name + '"?')) return;
+    await fetch('/api/clients/' + name, { method: 'DELETE' });
+    delete clientList[name];
+    const tab = document.getElementById('tab-' + name);
+    if (tab) tab.remove();
+    if (activeTab === name) activeTab = 'server';
+    rebuildTabs();
+    switchTab('server');
+}
+
+async function loadClients() {
+    try {
+        const resp = await fetch('/api/clients');
+        const data = await resp.json();
+        clientList = data;
+        for (const name of Object.keys(data)) {
+            renderClientTab(name);
+            clientLoadShaping(name);
+        }
+        rebuildTabs();
+    } catch(e) {}
+}
+
+// ─── Init ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+    loadClients();
+    setInterval(pollAll, 2000);
+    pollAll();
+});
 </script>
 </body>
 </html>
 """
+
+# ─── Utility Functions ─────────────────────────────────────────
 
 
 def read_json_file(path):
@@ -205,7 +759,6 @@ def read_json_file(path):
 
 
 def get_active_connections():
-    """Use ss to get active connections on monitored ports."""
     ports = {
         80: 'HTTP', 443: 'HTTPS', 5201: 'iperf3',
         9999: 'TCP Echo', 9998: 'UDP Echo',
@@ -221,7 +774,6 @@ def get_active_connections():
             if not line.strip():
                 continue
             parts = line.split()
-            # ss -tun format: Netid State Recv-Q Send-Q Local:Port Peer:Port
             if len(parts) < 6:
                 continue
             proto = parts[0].upper()
@@ -246,7 +798,6 @@ def get_active_connections():
 
 
 def count_connections_by_port():
-    """Count active connections per port."""
     counts = {}
     try:
         result = subprocess.run(
@@ -257,7 +808,6 @@ def count_connections_by_port():
             if not line.strip():
                 continue
             parts = line.split()
-            # ss -tun format: Netid State Recv-Q Send-Q Local:Port Peer:Port
             if len(parts) < 6:
                 continue
             local = parts[4]
@@ -271,6 +821,25 @@ def count_connections_by_port():
         pass
     return counts
 
+
+def proxy_to_client(name, path, method='GET', data=None):
+    """Proxy a request to a registered client."""
+    with clients_lock:
+        url = clients.get(name)
+    if not url:
+        return {'error': f'Client {name} not found'}, 404
+    target = url.rstrip('/') + path
+    try:
+        if method == 'POST':
+            r = http_client.post(target, json=data, timeout=10)
+        else:
+            r = http_client.get(target, timeout=10)
+        return r.json(), r.status_code
+    except Exception as e:
+        return {'error': f'Cannot reach client {name}: {e}'}, 502
+
+
+# ─── Routes ──────────────────────────────────────────────────
 
 @app.route('/')
 def dashboard():
@@ -353,14 +922,80 @@ def server_stats():
 
     return jsonify({
         'aggregate': {
-            'bytes_recv': total_recv,
-            'bytes_sent': total_sent,
-            'requests': total_reqs,
-            'active_connections': total_conns,
+            'bytes_recv': total_recv, 'bytes_sent': total_sent,
+            'requests': total_reqs, 'active_connections': total_conns,
         },
         'services': services,
         'connections': connections,
     })
+
+
+# ─── Client Registry ────────────────────────────────────────
+
+@app.route('/api/clients', methods=['GET'])
+def list_clients():
+    with clients_lock:
+        return jsonify(dict(clients))
+
+
+@app.route('/api/clients', methods=['POST'])
+def register_client():
+    data = request.json
+    name = data.get('name', '').strip()
+    url = data.get('url', '').strip()
+    if not name or not url:
+        return jsonify({'ok': False, 'error': 'name and url required'}), 400
+    with clients_lock:
+        clients[name] = url
+        save_clients()
+    return jsonify({'ok': True, 'message': f'Client {name} added'})
+
+
+@app.route('/api/clients/<name>', methods=['DELETE'])
+def remove_client(name):
+    with clients_lock:
+        if name in clients:
+            del clients[name]
+            save_clients()
+    return jsonify({'ok': True, 'message': f'Client {name} removed'})
+
+
+# ─── Client Proxy Endpoints ─────────────────────────────────
+
+@app.route('/api/client/<name>/status')
+def client_status(name):
+    result, code = proxy_to_client(name, '/api/status')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/start', methods=['POST'])
+def client_start(name):
+    result, code = proxy_to_client(name, '/api/start', 'POST', request.json)
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/stop', methods=['POST'])
+def client_stop(name):
+    result, code = proxy_to_client(name, '/api/stop', 'POST', request.json)
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/shaping', methods=['POST'])
+def client_shaping(name):
+    result, code = proxy_to_client(name, '/api/shaping', 'POST', request.json)
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/shaping/clear', methods=['POST'])
+def client_shaping_clear(name):
+    result, code = proxy_to_client(name, '/api/shaping/clear', 'POST', {})
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/shaping/current')
+def client_shaping_current(name):
+    result, code = proxy_to_client(name, '/api/shaping/current')
+    return jsonify(result), code
 
 
 if __name__ == '__main__':
