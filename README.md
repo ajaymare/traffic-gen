@@ -80,7 +80,7 @@ SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 
 ## Run from Docker Hub (No Build Required)
 
-Multi-platform images (amd64 + arm64) are available on Docker Hub.
+Images (amd64) are available on Docker Hub.
 
 **Server VM:**
 
