@@ -21,16 +21,7 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 - **Client**: Web UI (Flask) with traffic engine, tc/netem network shaping, and source IP simulation
 - **Server Dashboard**: Unified multi-client control panel with tabs — monitor server stats and control multiple clients from a single UI
 
-## Quick Start — Same Machine
-
-```bash
-docker compose up -d
-```
-
-- Client dashboard: `http://localhost:8080`
-- Server dashboard: `http://localhost:8082`
-
-## Deployment — Separate VMs
+## Deployment
 
 ### Server VM
 
@@ -46,7 +37,8 @@ docker compose -f docker-compose.server.yml up -d
 SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 ```
 
-Open `http://<client-vm-ip>:8080` for the dashboard.
+- Client dashboard: `http://<client-vm-ip>:8080`
+- Server dashboard: `http://<server-vm-ip>:8082`
 
 ## Features
 
@@ -90,30 +82,6 @@ Open `http://<client-vm-ip>:8080` for the dashboard.
 
 Multi-platform images (amd64 + arm64) are available on Docker Hub.
 
-### Same Machine
-
-```bash
-docker network create traffic-net
-
-docker run -d --name traffic-server \
-  --network traffic-net \
-  -p 8082:8082 \
-  --restart unless-stopped \
-  ajaymare/traffic-gen-server:latest
-
-docker run -d --name traffic-client \
-  --network traffic-net \
-  --cap-add NET_ADMIN \
-  -p 8080:8080 \
-  -e SERVER_HOST=traffic-server \
-  --restart unless-stopped \
-  ajaymare/traffic-gen-client:latest
-```
-
-Open `http://localhost:8080` for the dashboard.
-
-### Separate VMs
-
 **Server VM:**
 
 ```bash
@@ -137,14 +105,14 @@ docker run -d --name traffic-client \
   ajaymare/traffic-gen-client:latest
 ```
 
-Open `http://<client-vm-ip>:8080` for the dashboard.
+- Client dashboard: `http://<client-vm-ip>:8080`
+- Server dashboard: `http://<server-vm-ip>:8082`
 
 ### Stop and Remove
 
 ```bash
 docker stop traffic-client traffic-server
 docker rm traffic-client traffic-server
-docker network rm traffic-net  # if using same machine setup
 ```
 
 ## Server Dashboard — Multi-Client Control
