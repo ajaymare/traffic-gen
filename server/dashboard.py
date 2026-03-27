@@ -302,7 +302,7 @@ const PROTOCOLS = {
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     https: { name: 'HTTPS', fields: [
         { key: 'url', label: 'URL', type: 'text', default: 'https://server/' },
@@ -312,7 +312,7 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     http2: { name: 'HTTP/2', fields: [
         { key: 'url', label: 'URL', type: 'text', default: 'https://server/' },
@@ -322,7 +322,7 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     tcp: { name: 'TCP', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
@@ -332,7 +332,7 @@ const PROTOCOLS = {
         { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
         { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     udp: { name: 'UDP', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
@@ -342,7 +342,7 @@ const PROTOCOLS = {
         { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
         { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     ftp: { name: 'FTP', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
@@ -351,7 +351,7 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'text', default: '' },
         { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 300 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     ssh: { name: 'SSH', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
@@ -360,13 +360,13 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'text', default: 'testpass' },
         { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     icmp: { name: 'ICMP (Ping)', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
 };
 
