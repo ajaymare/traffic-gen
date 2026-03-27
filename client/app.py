@@ -102,5 +102,24 @@ def toggle_random_bandwidth():
         return jsonify({"ok": True, "message": "Random bandwidth stopped"})
 
 
+@app.route('/api/source_ips', methods=['GET', 'POST'])
+def source_ips():
+    if request.method == 'POST':
+        d = request.json
+        enabled = d.get('enabled', False)
+        if enabled:
+            base_ip = d.get('base_ip', '172.18.0.100')
+            count = int(d.get('count', 5))
+            added = network_shaper.add_ip_aliases(base_ip, count)
+            return jsonify({"ok": True, "message": f"Added {len(added)} source IPs",
+                            "ips": added})
+        else:
+            network_shaper.remove_ip_aliases()
+            return jsonify({"ok": True, "message": "Source IPs removed", "ips": []})
+    else:
+        ips = network_shaper.get_alias_ips()
+        return jsonify({"enabled": len(ips) > 0, "ips": ips})
+
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080, debug=False)

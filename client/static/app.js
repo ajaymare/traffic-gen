@@ -339,6 +339,41 @@ function updateRandomBwStatus(running) {
     if (toggle) toggle.checked = running;
 }
 
+// ─── Source IPs ─────────────────────────────────────────────
+
+function toggleSourceIpConfig() {
+    const enabled = document.getElementById('source-ip-toggle').checked;
+    document.getElementById('source-ip-config').style.display = enabled ? 'block' : 'none';
+    if (!enabled) {
+        apiPost('/api/source_ips', { enabled: false });
+        document.getElementById('source-ip-list').textContent = '';
+        addLog('[SOURCE IP] Disabled');
+    }
+}
+
+async function applySourceIps() {
+    const base_ip = document.getElementById('source-ip-base').value.trim();
+    const count = parseInt(document.getElementById('source-ip-count').value);
+    const res = await apiPost('/api/source_ips', { enabled: true, base_ip, count });
+    addLog('[SOURCE IP] ' + res.message);
+    if (res.ips && res.ips.length) {
+        document.getElementById('source-ip-list').textContent = 'Active: ' + res.ips.join(', ');
+    }
+}
+
+async function loadSourceIps() {
+    try {
+        const resp = await fetch('/api/source_ips');
+        const data = await resp.json();
+        const toggle = document.getElementById('source-ip-toggle');
+        if (toggle) toggle.checked = data.enabled;
+        document.getElementById('source-ip-config').style.display = data.enabled ? 'block' : 'none';
+        if (data.ips && data.ips.length) {
+            document.getElementById('source-ip-list').textContent = 'Active: ' + data.ips.join(', ');
+        }
+    } catch(e) {}
+}
+
 // ─── Shaping restore ────────────────────────────────────────
 
 async function loadShaping() {
@@ -374,8 +409,10 @@ async function loadFtpFileList() {
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
     loadShaping();
+    loadSourceIps();
     loadFtpFileList();
     document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
+    document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
     setInterval(pollStatus, 2000);
     setInterval(loadFtpFileList, 10000);
     pollStatus();

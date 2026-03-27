@@ -533,6 +533,18 @@ async function renderClientTab(name) {
         '<strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)' +
         '<span id="c-' + name + '-random-bw-status" style="color:#94a3b8;margin-left:8px"></span>' +
         '</label></div>' +
+        '<div style="margin-top:8px;padding:10px;background:#1e293b;border-radius:8px">' +
+        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+        '<input type="checkbox" id="c-' + name + '-source-ip-toggle" onchange="clientToggleSourceIp(\'' + name + '\')">' +
+        '<strong>Random Source IPs</strong> (simulate multiple clients)</label>' +
+        '<div id="c-' + name + '-source-ip-config" style="display:none;margin-top:8px">' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<label style="font-size:12px">Base IP</label>' +
+        '<input type="text" id="c-' + name + '-source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">' +
+        '<label style="font-size:12px">Count</label>' +
+        '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">' +
+        '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
+        '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div></div>' +
         '<div class="shaping-actions">' +
         '<button class="btn btn-primary" onclick="clientApplyShaping(\'' + name + '\')">Apply Shaping</button>' +
         '<button class="btn btn-secondary" onclick="clientClearShaping(\'' + name + '\')">Clear All</button>' +
@@ -669,6 +681,40 @@ async function clientToggleRandomBw(clientName) {
     addClientLog(clientName, '[SHAPING] ' + (res.message || ''));
     const st = document.getElementById('c-' + clientName + '-random-bw-status');
     if (st) st.textContent = enabled ? 'Active' : '';
+}
+
+function clientToggleSourceIp(clientName) {
+    const enabled = document.getElementById('c-' + clientName + '-source-ip-toggle').checked;
+    const cfg = document.getElementById('c-' + clientName + '-source-ip-config');
+    if (cfg) cfg.style.display = enabled ? 'block' : 'none';
+    if (!enabled) {
+        apiPost('/api/client/' + clientName + '/source_ips', { enabled: false });
+        const list = document.getElementById('c-' + clientName + '-source-ip-list');
+        if (list) list.textContent = '';
+        addClientLog(clientName, '[SOURCE IP] Disabled');
+    }
+}
+
+async function clientApplySourceIps(clientName) {
+    const base_ip = document.getElementById('c-' + clientName + '-source-ip-base').value.trim();
+    const count = parseInt(document.getElementById('c-' + clientName + '-source-ip-count').value);
+    const res = await apiPost('/api/client/' + clientName + '/source_ips', { enabled: true, base_ip, count });
+    addClientLog(clientName, '[SOURCE IP] ' + (res.message || ''));
+    const list = document.getElementById('c-' + clientName + '-source-ip-list');
+    if (list && res.ips && res.ips.length) list.textContent = 'Active: ' + res.ips.join(', ');
+}
+
+async function clientLoadSourceIps(clientName) {
+    try {
+        const resp = await fetch('/api/client/' + clientName + '/source_ips');
+        const data = await resp.json();
+        const toggle = document.getElementById('c-' + clientName + '-source-ip-toggle');
+        if (toggle) toggle.checked = data.enabled;
+        const cfg = document.getElementById('c-' + clientName + '-source-ip-config');
+        if (cfg) cfg.style.display = data.enabled ? 'block' : 'none';
+        const list = document.getElementById('c-' + clientName + '-source-ip-list');
+        if (list && data.ips && data.ips.length) list.textContent = 'Active: ' + data.ips.join(', ');
+    } catch(e) {}
 }
 
 // ─── Client Status Polling ───────────────────────────────────
@@ -839,7 +885,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadShaping(name);
+        clientLoadShaping(name); clientLoadSourceIps(name);
         switchTab(name);
     }
 }
@@ -862,7 +908,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadShaping(name);
+            clientLoadShaping(name); clientLoadSourceIps(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1140,6 +1186,15 @@ def client_server_host(name):
 @app.route('/api/client/<name>/shaping/random_bandwidth', methods=['POST'])
 def client_random_bandwidth(name):
     result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json)
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/source_ips', methods=['GET', 'POST'])
+def client_source_ips(name):
+    if request.method == 'POST':
+        result, code = proxy_to_client(name, '/api/source_ips', 'POST', request.json)
+    else:
+        result, code = proxy_to_client(name, '/api/source_ips')
     return jsonify(result), code
 
 

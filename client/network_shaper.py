@@ -108,3 +108,82 @@ def stop_random_bandwidth():
 
 def is_random_bandwidth_running():
     return _random_bw_running
+
+
+# ─── Source IP Aliases ──────────────────────────────────────
+
+_alias_ips = []
+_alias_lock = threading.Lock()
+
+
+def _get_subnet_prefix():
+    """Detect the subnet prefix length from the interface."""
+    try:
+        result = subprocess.run(
+            f'ip -4 addr show dev {INTERFACE}',
+            shell=True, capture_output=True, text=True)
+        for line in result.stdout.split('\n'):
+            if 'inet ' in line:
+                # e.g. "inet 172.18.0.2/16 ..."
+                parts = line.strip().split()
+                addr_cidr = parts[1]  # 172.18.0.2/16
+                return addr_cidr.split('/')[1]
+    except Exception:
+        pass
+    return '24'
+
+
+def add_ip_aliases(base_ip, count):
+    """Add IP aliases to the interface.
+
+    base_ip: starting IP, e.g. '172.18.0.100'
+    count: number of aliases to add
+    """
+    global _alias_ips
+    remove_ip_aliases()
+
+    prefix = _get_subnet_prefix()
+    parts = base_ip.split('.')
+    base_last = int(parts[3])
+    base_prefix = '.'.join(parts[:3])
+    added = []
+
+    for i in range(count):
+        last_octet = base_last + i
+        if last_octet > 254:
+            break
+        ip = f'{base_prefix}.{last_octet}'
+        ok, _ = _run(f'ip addr add {ip}/{prefix} dev {INTERFACE}')
+        if ok:
+            added.append(ip)
+            logger.info(f"Added alias IP {ip}/{prefix}")
+
+    with _alias_lock:
+        _alias_ips = added
+
+    logger.info(f"Added {len(added)} IP aliases ({added[0]}-{added[-1]})" if added else "No aliases added")
+    return added
+
+
+def remove_ip_aliases():
+    """Remove all previously added IP aliases."""
+    global _alias_ips
+    with _alias_lock:
+        for ip in _alias_ips:
+            _run(f'ip addr del {ip}/{_get_subnet_prefix()} dev {INTERFACE}')
+            logger.info(f"Removed alias IP {ip}")
+        _alias_ips = []
+
+
+def get_alias_ips():
+    """Return list of active alias IPs."""
+    with _alias_lock:
+        return list(_alias_ips)
+
+
+def get_random_source_ip():
+    """Return a random alias IP, or None if no aliases configured."""
+    with _alias_lock:
+        if _alias_ips:
+            return random.choice(_alias_ips)
+    return None
