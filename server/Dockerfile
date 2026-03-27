@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # SSH setup
 RUN mkdir -p /run/sshd && \
     useradd -m -s /bin/bash testuser && echo "testuser:testpass" | chpasswd && \
-    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#*PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    sed -i 's/^#*KbdInteractiveAuthentication.*/KbdInteractiveAuthentication yes/' /etc/ssh/sshd_config && \
     echo 'LogLevel INFO' >> /etc/ssh/sshd_config
 
 # FTP user
