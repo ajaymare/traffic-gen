@@ -433,9 +433,17 @@ function rebuildTabs() {
 }
 
 // ─── Client Tab Rendering ────────────────────────────────────
-function renderClientTab(name) {
+async function renderClientTab(name) {
     const existing = document.getElementById('tab-' + name);
     if (existing) return;
+
+    // Fetch the client's SERVER_HOST so defaults point to the right server
+    let serverHost = 'server';
+    try {
+        const resp = await fetch('/api/client/' + name + '/server_host');
+        const data = await resp.json();
+        if (data.server_host) serverHost = data.server_host;
+    } catch(e) {}
 
     const div = document.createElement('div');
     div.className = 'tab-content';
@@ -447,6 +455,9 @@ function renderClientTab(name) {
         for (const f of def.fields) {
             let input;
             const id = 'c-' + name + '-' + proto + '-' + f.key;
+            // Replace 'server' in defaults with client's actual server host
+            let defVal = f.default;
+            if (typeof defVal === 'string') defVal = defVal.replace(/server/g, serverHost);
             if (f.type === 'select') {
                 const opts = f.options.map(o =>
                     '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>').join('');
@@ -455,7 +466,7 @@ function renderClientTab(name) {
                 input = '<input type="checkbox" id="' + id + '"' + (f.default ? ' checked' : '') + '>';
             } else {
                 const step = f.step ? ' step="' + f.step + '"' : '';
-                input = '<input type="' + f.type + '" id="' + id + '" value="' + f.default + '"' + step + '>';
+                input = '<input type="' + f.type + '" id="' + id + '" value="' + defVal + '"' + step + '>';
             }
             fieldsHtml += '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
         }
@@ -1026,6 +1037,12 @@ def client_shaping_clear(name):
 @app.route('/api/client/<name>/shaping/current')
 def client_shaping_current(name):
     result, code = proxy_to_client(name, '/api/shaping/current')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/server_host')
+def client_server_host(name):
+    result, code = proxy_to_client(name, '/api/server_host')
     return jsonify(result), code
 
 
