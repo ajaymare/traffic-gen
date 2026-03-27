@@ -75,9 +75,61 @@ Open `http://<client-vm-ip>:8080` for the dashboard.
 - **SSH**: `testuser` / `testpass`
 - **FTP**: `anonymous` (no password) or `ftpuser` / `ftppass`
 
-## Docker Images
+## Run from Docker Hub (No Build Required)
+
+Multi-platform images (amd64 + arm64) are available on Docker Hub.
+
+### Same Machine
 
 ```bash
-docker pull ajaymare/traffic-gen-client:latest
-docker pull ajaymare/traffic-gen-server:latest
+docker network create traffic-net
+
+docker run -d --name traffic-server \
+  --network traffic-net \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-server:latest
+
+docker run -d --name traffic-client \
+  --network traffic-net \
+  --cap-add NET_ADMIN \
+  -p 8080:8080 \
+  -e SERVER_HOST=traffic-server \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-client:latest
+```
+
+Open `http://localhost:8080` for the dashboard.
+
+### Separate VMs
+
+**Server VM:**
+
+```bash
+docker run -d --name traffic-server \
+  -p 80:80 -p 443:443 -p 5201:5201 -p 5201:5201/udp \
+  -p 9999:9999 -p 9998:9998/udp \
+  -p 21:21 -p 21100-21110:21100-21110 -p 22:22 \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-server:latest
+```
+
+**Client VM:**
+
+```bash
+docker run -d --name traffic-client \
+  --cap-add NET_ADMIN \
+  -p 8080:8080 \
+  -e SERVER_HOST=<server-vm-ip> \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-client:latest
+```
+
+Open `http://<client-vm-ip>:8080` for the dashboard.
+
+### Stop and Remove
+
+```bash
+docker stop traffic-client traffic-server
+docker rm traffic-client traffic-server
+docker network rm traffic-net  # if using same machine setup
 ```
