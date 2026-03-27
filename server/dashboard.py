@@ -314,6 +314,16 @@ const PROTOCOLS = {
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
     ]},
+    http2: { name: 'HTTP/2', fields: [
+        { key: 'url', label: 'URL', type: 'text', default: 'https://server/' },
+        { key: 'method', label: 'Method', type: 'select', options: ['GET','POST'], default: 'GET' },
+        { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+        { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
+        { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+    ]},
     tcp: { name: 'TCP', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'port', label: 'Port', type: 'number', default: 9999 },

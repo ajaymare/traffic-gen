@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import requests
+import httpx
 import paramiko
 import urllib3
 
@@ -178,6 +179,57 @@ class TrafficEngine:
                 job.log(f"Error: {e}")
 
             time.sleep(interval)
+        job.log("Stopped")
+
+    # ─── HTTP/2 ──────────────────────────────────────────────
+
+    def _run_http2(self, job: TrafficJob):
+        cfg = job.config
+        url = cfg.get('url', 'https://server/')
+        method = cfg.get('method', 'GET').upper()
+        interval = float(cfg.get('interval', 1))
+        verify_ssl = not cfg.get('ignore_ssl', False)
+        data_size_kb = int(cfg.get('data_size_kb', 0))
+        upload = cfg.get('upload', False)
+        random_size = cfg.get('random_size', False)
+
+        job.log(f"HTTP/2 {method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
+
+        client = httpx.Client(http2=True, verify=verify_ssl, timeout=60)
+
+        while not job.should_stop():
+            try:
+                cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
+
+                if upload and cur_size_kb > 0:
+                    data = os.urandom(cur_size_kb * 1024)
+                    resp = client.post(url, content=data)
+                    job.stats['bytes_sent'] += len(data)
+                elif method == 'GET':
+                    if random_size:
+                        rand_mb = random.randint(1, 100)
+                        base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
+                        cur_url = f"{base}/generate/{rand_mb}"
+                    else:
+                        cur_url = url
+                    resp = client.get(cur_url)
+                    job.stats['bytes_recv'] += len(resp.content)
+                else:
+                    data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
+                    resp = client.request(method, url, content=data)
+                    job.stats['bytes_sent'] += len(data)
+                    job.stats['bytes_recv'] += len(resp.content)
+
+                h2_used = resp.http_version == 'HTTP/2'
+                job.stats['requests'] += 1
+                job.log(f"{method} {resp.status_code} ({resp.http_version}) — {len(resp.content)} bytes")
+            except Exception as e:
+                job.stats['errors'] += 1
+                job.log(f"Error: {e}")
+
+            time.sleep(interval)
+
+        client.close()
         job.log("Stopped")
 
     # ─── TCP ────────────────────────────────────────────────

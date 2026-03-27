@@ -3,3 +3,4 @@ requests==2.32.3
 paramiko==3.5.0
 urllib3==2.3.0
 gunicorn==23.0.0
+httpx[http2]==0.28.1
