@@ -645,6 +645,27 @@ async function pollClientStatus(clientName) {
             totSent += info.stats.bytes_sent; totRecv += info.stats.bytes_recv;
             totReqs += info.stats.requests; totErrs += info.stats.errors;
         }
+        // Collect logs from all protocols
+        let allLogs = [];
+        for (const [proto, info] of Object.entries(data.jobs || {})) {
+            if (info.logs) {
+                for (const line of info.logs) {
+                    allLogs.push('[' + proto.toUpperCase() + '] ' + line);
+                }
+            }
+        }
+        // Update activity log panel with remote logs
+        const panel = document.getElementById('log-' + clientName);
+        if (panel && allLogs.length > 0) {
+            const last50 = allLogs.slice(-50);
+            panel.innerHTML = last50.map(l => {
+                const cls = l.includes('rror') ? ' error' : '';
+                const d = document.createElement('div');
+                d.textContent = l;
+                return '<div class="log-entry' + cls + '">' + d.innerHTML + '</div>';
+            }).join('');
+            panel.scrollTop = panel.scrollHeight;
+        }
         const el = id => document.getElementById('c-' + clientName + '-' + id);
         if (el('sent')) el('sent').textContent = fmtBytes(totSent);
         if (el('recv')) el('recv').textContent = fmtBytes(totRecv);
