@@ -221,24 +221,19 @@ def get_active_connections():
             if not line.strip():
                 continue
             parts = line.split()
-            if len(parts) < 5:
+            # ss -tun format: Netid State Recv-Q Send-Q Local:Port Peer:Port
+            if len(parts) < 6:
                 continue
             proto = parts[0].upper()
-            local = parts[3]
-            remote = parts[4]
-            state = parts[0] if proto == 'UDP' else (parts[1] if len(parts) > 1 else '')
-            # Extract local port
+            state = parts[1]
+            local = parts[4]
+            remote = parts[5]
             local_port = local.rsplit(':', 1)[-1] if ':' in local else ''
             try:
                 port_num = int(local_port)
             except ValueError:
                 continue
             if port_num in ports:
-                # Parse state properly
-                if proto.startswith('TCP'):
-                    state = parts[1] if len(parts) > 1 else 'UNKNOWN'
-                else:
-                    state = 'UNCONN'
                 connections.append({
                     'proto': ports[port_num],
                     'local_port': port_num,
@@ -262,9 +257,10 @@ def count_connections_by_port():
             if not line.strip():
                 continue
             parts = line.split()
-            if len(parts) < 5:
+            # ss -tun format: Netid State Recv-Q Send-Q Local:Port Peer:Port
+            if len(parts) < 6:
                 continue
-            local = parts[3]
+            local = parts[4]
             local_port = local.rsplit(':', 1)[-1]
             try:
                 port_num = int(local_port)
