@@ -1,9 +1,44 @@
 import os
+import json
+import threading
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 UPLOAD_DIR = '/data/uploads'
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+STATS_FILE = '/tmp/http_stats.json'
+stats_lock = threading.Lock()
+http_stats = {
+    'requests': 0,
+    'bytes_recv': 0,
+    'bytes_sent': 0,
+    'errors': 0,
+    'uploads': 0,
+    'downloads': 0,
+}
+
+
+def save_http_stats():
+    with stats_lock:
+        with open(STATS_FILE, 'w') as f:
+            json.dump(http_stats, f)
+
+
+@app.before_request
+def track_request():
+    with stats_lock:
+        http_stats['requests'] += 1
+        http_stats['bytes_recv'] += request.content_length or 0
+
+
+@app.after_request
+def track_response(response):
+    with stats_lock:
+        content_length = response.content_length or 0
+        http_stats['bytes_sent'] += content_length
+    save_http_stats()
+    return response
 
 
 @app.route('/')
@@ -19,6 +54,9 @@ def health():
 
 @app.route('/upload', methods=['POST'])
 def upload():
+    with stats_lock:
+        http_stats['uploads'] += 1
+
     if 'file' in request.files:
         f = request.files['file']
         path = os.path.join(UPLOAD_DIR, f.filename)
@@ -36,6 +74,10 @@ def upload():
 def generate_data(size_mb):
     """Stream zeroed data of specified size in MB for bandwidth testing."""
     size_mb = min(size_mb, 1024)
+
+    with stats_lock:
+        http_stats['downloads'] += 1
+        http_stats['bytes_sent'] += size_mb * 1024 * 1024
 
     def generate():
         chunk = b'\x00' * (1024 * 1024)

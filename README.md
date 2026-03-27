@@ -25,7 +25,8 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 docker compose up -d
 ```
 
-Open `http://localhost:8080` for the dashboard.
+- Client dashboard: `http://localhost:8080`
+- Server dashboard: `http://localhost:8082`
 
 ## Deployment — Separate VMs
 
@@ -56,6 +57,7 @@ Open `http://<client-vm-ip>:8080` for the dashboard.
 - **Multi-client**: Server handles concurrent connections across all protocols
 - **Live stats**: Real-time bytes sent/received, request count, error tracking
 - **Countdown timer**: Shows remaining time for each running traffic flow
+- **Server dashboard**: Monitor incoming traffic, active connections, and per-service stats on port 8082
 
 ## Server Ports
 
@@ -69,6 +71,7 @@ Open `http://<client-vm-ip>:8080` for the dashboard.
 | 21 | FTP |
 | 21100-21110 | FTP passive |
 | 22 (map to 2222 if 22 is in use) | SSH (testuser/testpass) |
+| 8082 | Server Dashboard |
 
 ## Default Credentials
 
@@ -86,6 +89,7 @@ docker network create traffic-net
 
 docker run -d --name traffic-server \
   --network traffic-net \
+  -p 8082:8082 \
   --restart unless-stopped \
   ajaymare/traffic-gen-server:latest
 
@@ -109,6 +113,7 @@ docker run -d --name traffic-server \
   -p 80:80 -p 443:443 -p 5201:5201 -p 5201:5201/udp \
   -p 9999:9999 -p 9998:9998/udp \
   -p 21:21 -p 21100-21110:21100-21110 -p 2222:22 \
+  -p 8082:8082 \
   --restart unless-stopped \
   ajaymare/traffic-gen-server:latest
 ```

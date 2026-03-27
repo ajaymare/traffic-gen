@@ -32,6 +32,7 @@ services:
       - "2121:21"
       - "21100-21110:21100-21110"
       - "2222:22"
+      - "8082:8082"
     networks:
       - traffic-net
     restart: unless-stopped
