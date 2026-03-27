@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traffic Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<div class="header">
+    <h1>Traffic Generator Dashboard</h1>
+    <button class="btn btn-danger" onclick="stopAll()">Stop All Traffic</button>
+</div>
+
+<div class="container">
+
+    <!-- Stats -->
+    <div class="card">
+        <div class="card-header">Live Statistics</div>
+        <div class="card-body">
+            <div class="stats-grid">
+                <div class="stat-box"><div class="stat-label">Bytes Sent</div><div class="stat-value" id="stat-sent">0 B</div></div>
+                <div class="stat-box"><div class="stat-label">Bytes Received</div><div class="stat-value" id="stat-recv">0 B</div></div>
+                <div class="stat-box"><div class="stat-label">Requests</div><div class="stat-value" id="stat-reqs">0</div></div>
+                <div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value" id="stat-errors">0</div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Impairment -->
+    <div class="card">
+        <div class="card-header">Network Impairment (tc/netem)</div>
+        <div class="card-body">
+            <div class="shaping-grid">
+                <div class="slider-group">
+                    <label>Latency <span class="slider-value" id="latency-val">0</span> ms</label>
+                    <input type="range" id="latency" min="0" max="500" value="0" oninput="updateSlider('latency')">
+                </div>
+                <div class="slider-group">
+                    <label>Jitter <span class="slider-value" id="jitter-val">0</span> ms</label>
+                    <input type="range" id="jitter" min="0" max="200" value="0" oninput="updateSlider('jitter')">
+                </div>
+                <div class="slider-group">
+                    <label>Packet Loss <span class="slider-value" id="loss-val">0</span> %</label>
+                    <input type="range" id="loss" min="0" max="50" value="0" step="0.5" oninput="updateSlider('loss')">
+                </div>
+                <div class="slider-group">
+                    <label>Bandwidth <span class="slider-value" id="bandwidth-val">0</span> Mbps (0=unlimited)</label>
+                    <input type="range" id="bandwidth" min="0" max="100" value="0" oninput="updateSlider('bandwidth')">
+                </div>
+            </div>
+            <div class="shaping-actions">
+                <button class="btn btn-primary" onclick="applyShaping()">Apply Shaping</button>
+                <button class="btn btn-secondary" onclick="clearShaping()">Clear All</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Protocol Cards -->
+    <div class="card">
+        <div class="card-header">Traffic Generators</div>
+        <div class="card-body">
+            <div class="protocol-grid" id="protocol-grid"></div>
+        </div>
+    </div>
+
+    <!-- Logs -->
+    <div class="card">
+        <div class="card-header">
+            Activity Log
+            <button class="btn btn-secondary" onclick="logBuf.length=0;document.getElementById('log-panel').innerHTML=''">Clear</button>
+        </div>
+        <div class="card-body">
+            <div class="log-panel" id="log-panel"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>const SERVER_HOST = "{{ server_host }}";</script>
+<script src="/static/app.js"></script>
+</body>
+</html>

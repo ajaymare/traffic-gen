@@ -1,0 +1,273 @@
+const SRV = (typeof SERVER_HOST !== 'undefined') ? SERVER_HOST : 'server';
+
+const PROTOCOLS = {
+    http: {
+        name: 'HTTP',
+        fields: [
+            { key: 'url', label: 'URL', type: 'text', get default() { return `http://${SRV}/generate/100`; } },
+            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
+            { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+    https: {
+        name: 'HTTPS',
+        fields: [
+            { key: 'url', label: 'URL', type: 'text', get default() { return `https://${SRV}/`; } },
+            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
+            { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
+            { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+    tcp: {
+        name: 'TCP',
+        fields: [
+            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
+            { key: 'port', label: 'Port', type: 'number', default: 9999 },
+            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+            { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
+            { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+    udp: {
+        name: 'UDP',
+        fields: [
+            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
+            { key: 'port', label: 'Port', type: 'number', default: 9998 },
+            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+            { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
+            { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+    ftp: {
+        name: 'FTP',
+        fields: [
+            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
+            { key: 'port', label: 'Port', type: 'number', default: 21 },
+            { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
+            { key: 'password', label: 'Password', type: 'text', default: '' },
+            { key: 'filename', label: 'Filename', type: 'text', default: 'testfile_1gb.bin' },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 300 },
+        ]
+    },
+    ssh: {
+        name: 'SSH',
+        fields: [
+            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
+            { key: 'port', label: 'Port', type: 'number', default: 22 },
+            { key: 'username', label: 'Username', type: 'text', default: 'testuser' },
+            { key: 'password', label: 'Password', type: 'text', default: 'testpass' },
+            { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+    icmp: {
+        name: 'ICMP (Ping)',
+        fields: [
+            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
+            { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 60 },
+        ]
+    },
+};
+
+// ─── Render ────────────────────────────────────────────────
+
+function renderProtocolCards() {
+    const grid = document.getElementById('protocol-grid');
+    grid.innerHTML = '';
+
+    for (const [proto, def] of Object.entries(PROTOCOLS)) {
+        let fieldsHtml = '';
+        for (const f of def.fields) {
+            let input;
+            if (f.type === 'select') {
+                const opts = f.options.map(o =>
+                    `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o}</option>`).join('');
+                input = `<select id="cfg-${proto}-${f.key}">${opts}</select>`;
+            } else if (f.type === 'checkbox') {
+                input = `<input type="checkbox" id="cfg-${proto}-${f.key}" ${f.default ? 'checked' : ''}>`;
+            } else {
+                const step = f.step ? `step="${f.step}"` : '';
+                input = `<input type="${f.type}" id="cfg-${proto}-${f.key}" value="${f.default}" ${step}>`;
+            }
+            fieldsHtml += `<div class="field-row"><label>${f.label}</label>${input}</div>`;
+        }
+
+        grid.innerHTML += `
+            <div class="proto-card" id="proto-${proto}">
+                <div class="proto-header">
+                    <span class="proto-name">${def.name}</span>
+                    <span>
+                        <span class="proto-badge" id="status-${proto}">Stopped</span>
+                        <span class="proto-badge countdown" id="timer-${proto}" style="display:none"></span>
+                    </span>
+                </div>
+                <div class="proto-fields">${fieldsHtml}</div>
+                <div class="proto-actions">
+                    <button class="btn btn-start" onclick="startProto('${proto}')">Start</button>
+                    <button class="btn btn-stop" onclick="stopProto('${proto}')">Stop</button>
+                </div>
+            </div>`;
+    }
+}
+
+// ─── API ───────────────────────────────────────────────────
+
+async function apiPost(url, body) {
+    const r = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    return r.json();
+}
+
+function getConfig(proto) {
+    const cfg = {};
+    for (const f of PROTOCOLS[proto].fields) {
+        const el = document.getElementById(`cfg-${proto}-${f.key}`);
+        if (f.type === 'checkbox') cfg[f.key] = el.checked;
+        else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
+        else cfg[f.key] = el.value;
+    }
+    return cfg;
+}
+
+async function startProto(proto) {
+    const config = getConfig(proto);
+    const res = await apiPost('/api/start', { protocol: proto, config });
+    addLog(`[${proto.toUpperCase()}] ${res.message}`);
+}
+
+async function stopProto(proto) {
+    const res = await apiPost('/api/stop', { protocol: proto });
+    addLog(`[${proto.toUpperCase()}] ${res.message}`);
+}
+
+async function stopAll() {
+    await apiPost('/api/stop', { protocol: 'all' });
+    addLog('[ALL] Stopping all traffic');
+}
+
+// ─── Shaping ───────────────────────────────────────────────
+
+function updateSlider(id) {
+    document.getElementById(id + '-val').textContent = document.getElementById(id).value;
+}
+
+async function applyShaping() {
+    const body = {
+        latency_ms: parseInt(document.getElementById('latency').value),
+        jitter_ms: parseInt(document.getElementById('jitter').value),
+        packet_loss_pct: parseFloat(document.getElementById('loss').value),
+        bandwidth_mbps: parseInt(document.getElementById('bandwidth').value),
+    };
+    const res = await apiPost('/api/shaping', body);
+    addLog(`[SHAPING] ${res.message}`);
+}
+
+async function clearShaping() {
+    await apiPost('/api/shaping/clear', {});
+    ['latency', 'jitter', 'loss', 'bandwidth'].forEach(id => {
+        document.getElementById(id).value = 0;
+        updateSlider(id);
+    });
+    addLog('[SHAPING] Cleared');
+}
+
+// ─── Status polling ────────────────────────────────────────
+
+function fmtBytes(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+    return (b / 1073741824).toFixed(2) + ' GB';
+}
+
+function fmtTime(s) {
+    if (s < 0) return '--';
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+}
+
+async function pollStatus() {
+    try {
+        const resp = await fetch('/api/status');
+        const data = await resp.json();
+        let totSent = 0, totRecv = 0, totReqs = 0, totErrs = 0;
+
+        for (const [proto, info] of Object.entries(data.jobs)) {
+            const card = document.getElementById(`proto-${proto}`);
+            const badge = document.getElementById(`status-${proto}`);
+            const timer = document.getElementById(`timer-${proto}`);
+            if (!card) continue;
+
+            if (info.running) {
+                card.classList.add('running');
+                badge.classList.add('running');
+                badge.textContent = 'Running';
+                if (info.remaining >= 0) {
+                    timer.style.display = '';
+                    timer.textContent = fmtTime(info.remaining);
+                } else {
+                    timer.style.display = '';
+                    timer.textContent = fmtTime(info.elapsed);
+                }
+            } else {
+                card.classList.remove('running');
+                badge.classList.remove('running');
+                badge.textContent = 'Stopped';
+                timer.style.display = 'none';
+            }
+
+            totSent += info.stats.bytes_sent;
+            totRecv += info.stats.bytes_recv;
+            totReqs += info.stats.requests;
+            totErrs += info.stats.errors;
+        }
+
+        document.getElementById('stat-sent').textContent = fmtBytes(totSent);
+        document.getElementById('stat-recv').textContent = fmtBytes(totRecv);
+        document.getElementById('stat-reqs').textContent = totReqs.toLocaleString();
+        document.getElementById('stat-errors').textContent = totErrs.toLocaleString();
+    } catch (e) { /* ignore */ }
+}
+
+// ─── Logs ──────────────────────────────────────────────────
+
+const logBuf = [];
+
+function addLog(msg) {
+    logBuf.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    if (logBuf.length > 300) logBuf.splice(0, 150);
+    const panel = document.getElementById('log-panel');
+    panel.innerHTML = logBuf.map(l => {
+        const cls = l.includes('rror') ? ' error' : '';
+        const d = document.createElement('div');
+        d.textContent = l;
+        return `<div class="log-entry${cls}">${d.innerHTML}</div>`;
+    }).join('');
+    panel.scrollTop = panel.scrollHeight;
+}
+
+// ─── Init ──────────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderProtocolCards();
+    setInterval(pollStatus, 2000);
+    pollStatus();
+    addLog('Dashboard ready.');
+});

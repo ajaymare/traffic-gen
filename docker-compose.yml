@@ -1,0 +1,41 @@
+# Use this for running both on the same machine (local testing).
+# For separate VMs, use docker-compose.server.yml and docker-compose.client.yml
+
+services:
+  client:
+    build: ./client
+    image: ajaymare/traffic-gen-client:latest
+    container_name: traffic-client
+    cap_add:
+      - NET_ADMIN
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_HOST=server
+    networks:
+      - traffic-net
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server:
+    build: ./server
+    image: ajaymare/traffic-gen-server:latest
+    container_name: traffic-server
+    ports:
+      - "8081:80"
+      - "8443:443"
+      - "5201:5201"
+      - "5201:5201/udp"
+      - "19999:9999"
+      - "19998:9998/udp"
+      - "2121:21"
+      - "21100-21110:21100-21110"
+      - "2222:22"
+    networks:
+      - traffic-net
+    restart: unless-stopped
+
+networks:
+  traffic-net:
+    driver: bridge
