@@ -285,15 +285,21 @@ def dashboard():
 def server_stats():
     http = read_json_file('/tmp/http_stats.json')
     echo = read_json_file('/tmp/echo_stats.json')
+    ftp = read_json_file('/tmp/ftp_stats.json')
+    ssh = read_json_file('/tmp/ssh_stats.json')
     conn_counts = count_connections_by_port()
     connections = get_active_connections()
 
     tcp_echo = echo.get('tcp', {})
     udp_echo = echo.get('udp', {})
 
-    total_recv = http.get('bytes_recv', 0) + tcp_echo.get('bytes_recv', 0) + udp_echo.get('bytes_recv', 0)
-    total_sent = http.get('bytes_sent', 0) + tcp_echo.get('bytes_sent', 0) + udp_echo.get('bytes_sent', 0)
-    total_reqs = http.get('requests', 0) + tcp_echo.get('connections', 0) + udp_echo.get('packets', 0)
+    total_recv = (http.get('bytes_recv', 0) + tcp_echo.get('bytes_recv', 0) +
+                  udp_echo.get('bytes_recv', 0) + ftp.get('bytes_recv', 0))
+    total_sent = (http.get('bytes_sent', 0) + tcp_echo.get('bytes_sent', 0) +
+                  udp_echo.get('bytes_sent', 0) + ftp.get('bytes_sent', 0))
+    total_reqs = (http.get('requests', 0) + tcp_echo.get('connections', 0) +
+                  udp_echo.get('packets', 0) + ftp.get('downloads', 0) +
+                  ftp.get('uploads', 0) + ssh.get('sessions', 0))
     total_conns = sum(conn_counts.values())
 
     services = {
@@ -330,11 +336,22 @@ def server_stats():
         },
         'FTP': {
             'active_connections': conn_counts.get(21, 0),
-            'stats': {}
+            'stats': {
+                'connections': ftp.get('connections', 0),
+                'downloads': ftp.get('downloads', 0),
+                'uploads': ftp.get('uploads', 0),
+                'bytes_sent': ftp.get('bytes_sent', 0),
+                'bytes_recv': ftp.get('bytes_recv', 0),
+                'errors': ftp.get('errors', 0),
+            }
         },
         'SSH': {
             'active_connections': conn_counts.get(22, 0),
-            'stats': {}
+            'stats': {
+                'sessions': ssh.get('sessions', 0),
+                'active_sessions': ssh.get('active_sessions', 0),
+                'failed_logins': ssh.get('failed_logins', 0),
+            }
         },
     }
 

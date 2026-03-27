@@ -8,7 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /run/sshd && \
     useradd -m -s /bin/bash testuser && echo "testuser:testpass" | chpasswd && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
+    echo 'LogLevel INFO' >> /etc/ssh/sshd_config
 
 # FTP user
 RUN useradd -m -s /bin/bash ftpuser && echo "ftpuser:ftppass" | chpasswd
@@ -26,7 +27,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY vsftpd.conf /etc/vsftpd.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-COPY app.py echo_server.py dashboard.py ./
+COPY app.py echo_server.py dashboard.py stats_collector.py ./
 
 # Generate test files for FTP/HTTP download
 RUN mkdir -p /data/uploads && \
