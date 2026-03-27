@@ -509,7 +509,14 @@ async function renderClientTab(name) {
         '<input type="range" id="c-' + name + '-loss" min="0" max="50" value="0" step="0.5" oninput="clientUpdateSlider(\'' + name + '\',\'loss\')"></div>' +
         '<div class="slider-group"><label>Bandwidth <span class="slider-value" id="c-' + name + '-bandwidth-val">0</span> Mbps (0=unlimited)</label>' +
         '<input type="range" id="c-' + name + '-bandwidth" min="0" max="100" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
-        '</div><div class="shaping-actions">' +
+        '</div>' +
+        '<div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px">' +
+        '<label style="display:flex;align-items:center;gap:8px">' +
+        '<input type="checkbox" id="c-' + name + '-random-bw" onchange="clientToggleRandomBw(\'' + name + '\')">' +
+        '<strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)' +
+        '<span id="c-' + name + '-random-bw-status" style="color:#94a3b8;margin-left:8px"></span>' +
+        '</label></div>' +
+        '<div class="shaping-actions">' +
         '<button class="btn btn-primary" onclick="clientApplyShaping(\'' + name + '\')">Apply Shaping</button>' +
         '<button class="btn btn-secondary" onclick="clientClearShaping(\'' + name + '\')">Clear All</button>' +
         '</div></div></div>' +
@@ -629,7 +636,22 @@ async function clientLoadShaping(clientName) {
             document.getElementById('c-' + clientName + '-bandwidth').value = data.bandwidth_mbps;
             ['latency','jitter','loss','bandwidth'].forEach(id => clientUpdateSlider(clientName, id));
         }
+        if (data.random_bandwidth) {
+            const el = document.getElementById('c-' + clientName + '-random-bw');
+            if (el) el.checked = true;
+            const st = document.getElementById('c-' + clientName + '-random-bw-status');
+            if (st) st.textContent = 'Active';
+        }
     } catch(e) {}
+}
+
+async function clientToggleRandomBw(clientName) {
+    const enabled = document.getElementById('c-' + clientName + '-random-bw').checked;
+    const res = await apiPost('/api/client/' + clientName + '/shaping/random_bandwidth',
+        { enabled, min_mbps: 20, max_mbps: 1000, interval: 10 });
+    addClientLog(clientName, '[SHAPING] ' + (res.message || ''));
+    const st = document.getElementById('c-' + clientName + '-random-bw-status');
+    if (st) st.textContent = enabled ? 'Active' : '';
 }
 
 // ─── Client Status Polling ───────────────────────────────────
@@ -1043,6 +1065,12 @@ def client_shaping_current(name):
 @app.route('/api/client/<name>/server_host')
 def client_server_host(name):
     result, code = proxy_to_client(name, '/api/server_host')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/shaping/random_bandwidth', methods=['POST'])
+def client_random_bandwidth(name):
+    result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json)
     return jsonify(result), code
 
 

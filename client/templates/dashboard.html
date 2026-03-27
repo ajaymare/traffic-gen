@@ -50,6 +50,13 @@
                     <input type="range" id="bandwidth" min="0" max="100" value="0" oninput="updateSlider('bandwidth')">
                 </div>
             </div>
+            <div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px">
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <input type="checkbox" id="random-bw-toggle">
+                    <strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)
+                    <span id="random-bw-status" style="color:#94a3b8;margin-left:8px"></span>
+                </label>
+            </div>
             <div class="shaping-actions">
                 <button class="btn btn-primary" onclick="applyShaping()">Apply Shaping</button>
                 <button class="btn btn-secondary" onclick="clearShaping()">Clear All</button>

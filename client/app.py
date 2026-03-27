@@ -83,7 +83,23 @@ def clear_shaping():
 
 @app.route('/api/shaping/current')
 def get_shaping():
-    return jsonify(current_shaping)
+    return jsonify({**current_shaping,
+                    "random_bandwidth": network_shaper.is_random_bandwidth_running()})
+
+
+@app.route('/api/shaping/random_bandwidth', methods=['POST'])
+def toggle_random_bandwidth():
+    d = request.json
+    enabled = d.get('enabled', False)
+    min_mbps = int(d.get('min_mbps', 20))
+    max_mbps = int(d.get('max_mbps', 1000))
+    interval = int(d.get('interval', 10))
+    if enabled:
+        network_shaper.start_random_bandwidth(min_mbps, max_mbps, interval)
+        return jsonify({"ok": True, "message": f"Random bandwidth {min_mbps}-{max_mbps} Mbps every {interval}s"})
+    else:
+        network_shaper.stop_random_bandwidth()
+        return jsonify({"ok": True, "message": "Random bandwidth stopped"})
 
 
 if __name__ == '__main__':

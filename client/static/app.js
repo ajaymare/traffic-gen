@@ -321,6 +321,24 @@ function addLog(msg) {
     panel.scrollTop = panel.scrollHeight;
 }
 
+// ─── Random Bandwidth ───────────────────────────────────────
+
+async function toggleRandomBandwidth() {
+    const enabled = document.getElementById('random-bw-toggle').checked;
+    const res = await apiPost('/api/shaping/random_bandwidth', {
+        enabled, min_mbps: 20, max_mbps: 1000, interval: 10
+    });
+    addLog('[SHAPING] ' + res.message);
+    updateRandomBwStatus(enabled);
+}
+
+function updateRandomBwStatus(running) {
+    const el = document.getElementById('random-bw-status');
+    if (el) el.textContent = running ? 'Active' : '';
+    const toggle = document.getElementById('random-bw-toggle');
+    if (toggle) toggle.checked = running;
+}
+
 // ─── Shaping restore ────────────────────────────────────────
 
 async function loadShaping() {
@@ -332,6 +350,7 @@ async function loadShaping() {
         document.getElementById('loss').value = data.packet_loss_pct;
         document.getElementById('bandwidth').value = data.bandwidth_mbps;
         ['latency', 'jitter', 'loss', 'bandwidth'].forEach(updateSlider);
+        if (data.random_bandwidth) updateRandomBwStatus(true);
     } catch (e) { /* ignore */ }
 }
 
@@ -340,6 +359,7 @@ async function loadShaping() {
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
     loadShaping();
+    document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
     setInterval(pollStatus, 2000);
     pollStatus();
     addLog('Dashboard ready.');
