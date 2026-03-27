@@ -22,6 +22,11 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
 
+def _random_xff():
+    """Generate a random X-Forwarded-For IP address."""
+    return f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+
+
 @dataclass
 class TrafficJob:
     protocol: str
@@ -153,9 +158,11 @@ class TrafficEngine:
             try:
                 cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
+                headers = {'X-Forwarded-For': _random_xff()}
+
                 if upload and cur_size_kb > 0:
                     data = os.urandom(cur_size_kb * 1024)
-                    resp = session.post(url, data=data, verify=verify_ssl, timeout=30)
+                    resp = session.post(url, data=data, headers=headers, verify=verify_ssl, timeout=30)
                     job.stats['bytes_sent'] += len(data)
                 elif method == 'GET':
                     if random_size:
@@ -164,12 +171,12 @@ class TrafficEngine:
                         cur_url = f"{base}/generate/{rand_mb}"
                     else:
                         cur_url = url
-                    resp = session.get(cur_url, verify=verify_ssl, timeout=60, stream=True)
+                    resp = session.get(cur_url, headers=headers, verify=verify_ssl, timeout=60, stream=True)
                     content = resp.content
                     job.stats['bytes_recv'] += len(content)
                 else:
                     data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
-                    resp = session.request(method, url, data=data, verify=verify_ssl, timeout=30)
+                    resp = session.request(method, url, data=data, headers=headers, verify=verify_ssl, timeout=30)
                     job.stats['bytes_sent'] += len(data)
                     job.stats['bytes_recv'] += len(resp.content)
 
@@ -202,9 +209,11 @@ class TrafficEngine:
             try:
                 cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
+                headers = {'X-Forwarded-For': _random_xff()}
+
                 if upload and cur_size_kb > 0:
                     data = os.urandom(cur_size_kb * 1024)
-                    resp = client.post(url, content=data)
+                    resp = client.post(url, content=data, headers=headers)
                     job.stats['bytes_sent'] += len(data)
                 elif method == 'GET':
                     if random_size:
@@ -213,11 +222,11 @@ class TrafficEngine:
                         cur_url = f"{base}/generate/{rand_mb}"
                     else:
                         cur_url = url
-                    resp = client.get(cur_url)
+                    resp = client.get(cur_url, headers=headers)
                     job.stats['bytes_recv'] += len(resp.content)
                 else:
                     data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
-                    resp = client.request(method, url, content=data)
+                    resp = client.request(method, url, content=data, headers=headers)
                     job.stats['bytes_sent'] += len(data)
                     job.stats['bytes_recv'] += len(resp.content)
 
