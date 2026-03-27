@@ -14,27 +14,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import httpx
 import paramiko
 import urllib3
 
-import network_shaper
-
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
-
-
-class SourceAddressAdapter(HTTPAdapter):
-    """HTTPAdapter that binds to a specific source address."""
-    def __init__(self, source_address, **kwargs):
-        self._source_address = source_address
-        super().__init__(**kwargs)
-
-    def init_poolmanager(self, *args, **kwargs):
-        kwargs['source_address'] = (self._source_address, 0)
-        super().init_poolmanager(*args, **kwargs)
 
 
 @dataclass
@@ -162,14 +147,9 @@ class TrafficEngine:
 
         job.log(f"{method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
 
+        session = requests.Session()
+
         while not job.should_stop():
-            # Create session with random source IP per iteration
-            session = requests.Session()
-            src_ip = network_shaper.get_random_source_ip()
-            if src_ip:
-                adapter = SourceAddressAdapter(src_ip)
-                session.mount('http://', adapter)
-                session.mount('https://', adapter)
             try:
                 cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
@@ -216,10 +196,9 @@ class TrafficEngine:
 
         job.log(f"HTTP/2 {method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
 
+        client = httpx.Client(http2=True, verify=verify_ssl, timeout=60)
+
         while not job.should_stop():
-            src_ip = network_shaper.get_random_source_ip()
-            client = httpx.Client(http2=True, verify=verify_ssl, timeout=60,
-                                  local_address=src_ip if src_ip else None)
             try:
                 cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
@@ -248,11 +227,10 @@ class TrafficEngine:
             except Exception as e:
                 job.stats['errors'] += 1
                 job.log(f"Error: {e}")
-            finally:
-                client.close()
 
             time.sleep(interval)
 
+        client.close()
         job.log("Stopped")
 
     # ─── TCP ────────────────────────────────────────────────
@@ -275,9 +253,6 @@ class TrafficEngine:
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(10)
-                src_ip = network_shaper.get_random_source_ip()
-                if src_ip:
-                    sock.bind((src_ip, 0))
                 sock.connect((host, port))
                 job.log(f"Connected to {host}:{port}")
 
@@ -315,9 +290,6 @@ class TrafficEngine:
         job.log(f"UDP echo {host}:{port} msg_size={msg_size} random_size={random_size}")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)
-        src_ip = network_shaper.get_random_source_ip()
-        if src_ip:
-            sock.bind((src_ip, 0))
 
         while not job.should_stop():
             try:
@@ -412,8 +384,7 @@ class TrafficEngine:
 
         while not job.should_stop():
             try:
-                src_ip = network_shaper.get_random_source_ip()
-                ftp = ftplib.FTP(source_address=(src_ip, 0) if src_ip else None)
+                ftp = ftplib.FTP()
                 ftp.connect(host, port, timeout=30)
                 ftp.login(username, password)
                 ftp.set_pasv(True)
@@ -469,15 +440,8 @@ class TrafficEngine:
             try:
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                src_ip = network_shaper.get_random_source_ip()
-                sock = None
-                if src_ip:
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.bind((src_ip, 0))
-                    sock.connect((host, port))
                 client.connect(host, port=port, username=username,
-                               password=password, timeout=10,
-                               sock=sock)
+                               password=password, timeout=10)
                 stdin, stdout, stderr = client.exec_command(command)
                 out = stdout.read().decode().strip()
                 job.stats['requests'] += 1
@@ -503,11 +467,7 @@ class TrafficEngine:
 
         while not job.should_stop():
             try:
-                src_ip = network_shaper.get_random_source_ip()
-                cmd = ['ping', '-c', '1', '-W', '3', '-s', str(packet_size)]
-                if src_ip:
-                    cmd.extend(['-I', src_ip])
-                cmd.append(host)
+                cmd = ['ping', '-c', '1', '-W', '3', '-s', str(packet_size), host]
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                 job.stats['requests'] += 1
 
