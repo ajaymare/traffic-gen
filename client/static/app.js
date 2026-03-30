@@ -429,10 +429,11 @@ async function pollStatus() {
 // ─── Logs ──────────────────────────────────────────────────
 
 const logBuf = [];
+let autoRefreshInterval = null;
 
 function addLog(msg) {
     logBuf.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-    if (logBuf.length > 300) logBuf.splice(0, 150);
+    if (logBuf.length > 1000) logBuf.splice(0, 500);
     const panel = document.getElementById('log-panel');
     panel.innerHTML = logBuf.map(l => {
         const cls = l.toLowerCase().includes('error') ? ' error' : '';
@@ -441,6 +442,22 @@ function addLog(msg) {
         return `<div class="log-entry${cls}">${d.innerHTML}</div>`;
     }).join('');
     panel.scrollTop = panel.scrollHeight;
+}
+
+function toggleAutoRefresh() {
+    const enabled = document.getElementById('auto-refresh-toggle').checked;
+    if (enabled) {
+        if (!autoRefreshInterval) {
+            autoRefreshInterval = setInterval(pollStatus, 2000);
+            pollStatus();
+        }
+    } else {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+    addLog(enabled ? 'Auto-refresh enabled' : 'Auto-refresh paused');
 }
 
 // ─── Random Bandwidth ───────────────────────────────────────
@@ -535,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadFtpFileList();
     document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
-    setInterval(pollStatus, 2000);
+    autoRefreshInterval = setInterval(pollStatus, 2000);
     setInterval(loadFtpFileList, 10000);
     pollStatus();
     addLog('Dashboard ready.');

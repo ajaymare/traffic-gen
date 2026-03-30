@@ -81,7 +81,7 @@ class TrafficJob:
     stats: dict = field(default_factory=lambda: {
         "bytes_sent": 0, "bytes_recv": 0, "requests": 0, "errors": 0})
     config: dict = field(default_factory=dict)
-    logs: deque = field(default_factory=lambda: deque(maxlen=500))
+    logs: deque = field(default_factory=lambda: deque(maxlen=1000))
 
     def log(self, msg):
         ts = time.strftime('%H:%M:%S')
@@ -121,7 +121,7 @@ class TrafficEngine:
                     "running": job.running,
                     "stats": dict(job.stats),
                     "config": dict(job.config),
-                    "logs": list(job.logs)[-30:],
+                    "logs": list(job.logs)[-50:],
                     "elapsed": job.elapsed(),
                     "remaining": job.remaining(),
                     "duration": job.duration,
@@ -519,10 +519,13 @@ class TrafficEngine:
                 remaining = proc.stdout.read()
                 stderr = proc.stderr.read()
 
-                # If server was busy, try the next port
-                if proc.returncode != 0 and 'server is busy' in (stderr or ''):
-                    job.log(f"Port {port} busy, trying next...")
-                    continue
+                # If server was busy or unreachable, try the next port
+                if proc.returncode != 0 and stderr:
+                    err_lower = stderr.lower()
+                    if any(s in err_lower for s in ['server is busy', 'connection refused',
+                            'unable to connect', 'no route to host', 'server side protocol']):
+                        job.log(f"Port {port} unavailable ({stderr.strip()[:80]}), trying next...")
+                        continue
 
                 if remaining:
                     for line in remaining.split('\n'):
@@ -538,7 +541,7 @@ class TrafficEngine:
                 job.stats['errors'] += 1
                 job.log(f"iperf3 error on port {port}: {e}")
 
-        job.log("All iperf3 ports busy — could not connect")
+        job.log("All iperf3 ports (5201-5203) unavailable — ensure server container is running")
         job.stats['errors'] += 1
         job.log("Stopped")
 

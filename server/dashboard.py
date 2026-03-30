@@ -482,7 +482,7 @@ async function apiPost(url, body) {
 function addClientLog(name, msg) {
     if (!clientLogs[name]) clientLogs[name] = [];
     clientLogs[name].push('[' + new Date().toLocaleTimeString() + '] ' + msg);
-    if (clientLogs[name].length > 300) clientLogs[name].splice(0, 150);
+    if (clientLogs[name].length > 1000) clientLogs[name].splice(0, 500);
     const panel = document.getElementById('log-' + name);
     if (panel) {
         panel.innerHTML = clientLogs[name].map(l => {
@@ -634,8 +634,11 @@ async function renderClientTab(name) {
         '</div></div><div class="card-body"><div class="protocol-grid">' + protoCardsHtml + '</div></div></div>' +
         // Log
         '<div class="card"><div class="card-header">Activity Log ' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+        '<label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;cursor:pointer">' +
+        '<input type="checkbox" id="auto-refresh-' + name + '" checked onchange="toggleAutoRefresh()"> Auto-refresh</label>' +
         '<button class="btn btn-secondary" onclick="clientLogs[\'' + name + '\']=[];document.getElementById(\'log-' + name + '\').innerHTML=\'\'">Clear</button>' +
-        '</div><div class="card-body"><div class="log-panel" id="log-' + name + '"></div></div></div>' +
+        '</div></div><div class="card-body"><div class="log-panel" id="log-' + name + '"></div></div></div>' +
         '</div>';
 
     document.body.appendChild(div);
@@ -980,6 +983,18 @@ async function deleteFtpFile(name) {
     loadFtpFiles();
 }
 
+// ─── Auto-refresh Toggle ─────────────────────────────────────
+function toggleAutoRefresh() {
+    const checkboxes = document.querySelectorAll('[id^="auto-refresh-"]');
+    let enabled = true;
+    checkboxes.forEach(cb => { if (cb.id === 'auto-refresh-' + activeTab) enabled = cb.checked; });
+    if (enabled) {
+        if (!pollInterval) { pollInterval = setInterval(pollAll, 2000); pollAll(); }
+    } else {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+}
+
 // ─── Polling Loop ────────────────────────────────────────────
 async function pollAll() {
     if (activeTab === 'server') {
@@ -1039,7 +1054,7 @@ async function loadClients() {
 document.addEventListener('DOMContentLoaded', () => {
     loadClients();
     loadFtpFiles();
-    setInterval(pollAll, 2000);
+    pollInterval = setInterval(pollAll, 2000);
     pollAll();
 });
 </script>

@@ -100,7 +100,12 @@
     <div class="card">
         <div class="card-header">
             Activity Log
-            <button class="btn btn-secondary" onclick="logBuf.length=0;document.getElementById('log-panel').innerHTML=''">Clear</button>
+            <div style="display:flex;align-items:center;gap:8px">
+                <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;cursor:pointer">
+                    <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()"> Auto-refresh
+                </label>
+                <button class="btn btn-secondary" onclick="logBuf.length=0;document.getElementById('log-panel').innerHTML=''">Clear</button>
+            </div>
         </div>
         <div class="card-body">
             <div class="log-panel" id="log-panel"></div>
