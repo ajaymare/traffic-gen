@@ -9,7 +9,7 @@ STATS_FILE = '/tmp/echo_stats.json'
 stats_lock = threading.Lock()
 stats = {
     'tcp': {'connections': 0, 'active': 0, 'bytes_recv': 0, 'bytes_sent': 0},
-    'udp': {'packets': 0, 'bytes_recv': 0, 'bytes_sent': 0},
+    'udp': {'packets': 0, 'bytes_recv': 0, 'bytes_sent': 0, 'last_active': 0},
 }
 
 
@@ -63,6 +63,7 @@ def udp_echo_server(port=9998):
             stats['udp']['packets'] += 1
             stats['udp']['bytes_recv'] += len(data)
             stats['udp']['bytes_sent'] += len(data)
+            stats['udp']['last_active'] = time.time()
         srv.sendto(data, addr)
 
 

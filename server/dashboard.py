@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import threading
+import time
 
 import requests as http_client
 from flask import Flask, jsonify, request, render_template_string
@@ -1067,7 +1068,7 @@ def server_stats():
             }
         },
         'UDP Echo': {
-            'active_connections': conn_counts.get(9998, 0),
+            'active_connections': max(conn_counts.get(9998, 0), 1 if (time.time() - udp_echo.get('last_active', 0)) < 10 else 0),
             'stats': {
                 'packets': udp_echo.get('packets', 0),
                 'bytes_recv': udp_echo.get('bytes_recv', 0),
