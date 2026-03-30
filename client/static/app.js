@@ -1,5 +1,7 @@
 const SRV = (typeof SERVER_HOST !== 'undefined') ? SERVER_HOST : 'server';
 
+const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
+
 const PROTOCOLS = {
     http: {
         name: 'HTTP',
@@ -10,6 +12,12 @@ const PROTOCOLS = {
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -23,6 +31,12 @@ const PROTOCOLS = {
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -36,6 +50,12 @@ const PROTOCOLS = {
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -49,6 +69,12 @@ const PROTOCOLS = {
             { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
             { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -62,6 +88,12 @@ const PROTOCOLS = {
             { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
             { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -71,9 +103,15 @@ const PROTOCOLS = {
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 21 },
             { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
-            { key: 'password', label: 'Password', type: 'text', default: '' },
+            { key: 'password', label: 'Password', type: 'password', default: '' },
             { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin', 'testfile_1gb.bin'], default: 'testfile_1gb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -81,43 +119,33 @@ const PROTOCOLS = {
         name: 'SSH',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
-            { key: 'port', label: 'Port', type: 'number', default: 22 },
+            { key: 'port', label: 'Port', type: 'number', default: 2222 },
             { key: 'username', label: 'Username', type: 'text', default: 'testuser' },
-            { key: 'password', label: 'Password', type: 'text', default: 'testpass' },
+            { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
             { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
     ext_https: {
         name: 'External HTTPS',
         fields: [
-            { key: 'url', label: 'Target URL', type: 'text', default: 'https://www.google.com' },
+            { key: 'urls', label: 'Target URLs (one per line)', type: 'textarea', default: 'https://www.google.com' },
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'HEAD'], default: 'GET' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
-            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-        ]
-    },
-    ext_tcp: {
-        name: 'External TCP',
-        fields: [
-            { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
-            { key: 'port', label: 'Target Port', type: 'number', default: 443 },
-            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-        ]
-    },
-    ext_udp: {
-        name: 'External UDP',
-        fields: [
-            { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
-            { key: 'port', label: 'Target Port', type: 'number', default: 53 },
-            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 512 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-            { key: 'dns_mode', label: 'DNS Query Mode', type: 'checkbox', default: true },
-            { key: 'dns_domain', label: 'DNS Domain', type: 'text', default: 'example.com' },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -127,6 +155,12 @@ const PROTOCOLS = {
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
+            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -141,11 +175,14 @@ function renderProtocolCards() {
     for (const [proto, def] of Object.entries(PROTOCOLS)) {
         let fieldsHtml = '';
         for (const f of def.fields) {
+            if (f.key === 'flows') continue; // rendered separately
             let input;
             if (f.type === 'select') {
                 const opts = f.options.map(o =>
                     `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o}</option>`).join('');
                 input = `<select id="cfg-${proto}-${f.key}">${opts}</select>`;
+            } else if (f.type === 'textarea') {
+                input = `<textarea id="cfg-${proto}-${f.key}" rows="3" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;resize:vertical;font-family:inherit">${f.default}</textarea>`;
             } else if (f.type === 'checkbox') {
                 input = `<input type="checkbox" id="cfg-${proto}-${f.key}" ${f.default ? 'checked' : ''}>`;
             } else {
@@ -171,6 +208,9 @@ function renderProtocolCards() {
                 <div class="proto-actions">
                     <button class="btn btn-start" onclick="startProto('${proto}')">Start</button>
                     <button class="btn btn-stop" onclick="stopProto('${proto}')">Stop</button>
+                    <label style="font-size:11px;color:#666;display:flex;align-items:center;gap:4px;margin-left:8px">
+                        Flows <input type="number" id="cfg-${proto}-flows" value="1" min="1" max="20" style="width:45px;padding:2px 4px;font-size:11px">
+                    </label>
                 </div>
             </div>`;
     }
@@ -190,6 +230,7 @@ async function apiPost(url, body) {
 function getConfig(proto) {
     const cfg = {};
     for (const f of PROTOCOLS[proto].fields) {
+        if (f.key === 'flows') continue; // handled separately
         const el = document.getElementById(`cfg-${proto}-${f.key}`);
         if (f.type === 'checkbox') cfg[f.key] = el.checked;
         else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
@@ -198,10 +239,24 @@ function getConfig(proto) {
     return cfg;
 }
 
+function getFlowCount(proto) {
+    const el = document.getElementById(`cfg-${proto}-flows`);
+    return el ? Math.max(1, Math.min(20, parseInt(el.value) || 1)) : 1;
+}
+
 async function startProto(proto) {
     const config = getConfig(proto);
-    const res = await apiPost('/api/start', { protocol: proto, config });
-    addLog(`[${proto.toUpperCase()}] ${res.message}`);
+    const flows = getFlowCount(proto);
+    if (flows === 1) {
+        const res = await apiPost('/api/start', { protocol: proto, config });
+        addLog(`[${proto.toUpperCase()}] ${res.message}`);
+    } else {
+        for (let i = 1; i <= flows; i++) {
+            const cfg = {...config, flow_id: String(i)};
+            const res = await apiPost('/api/start', { protocol: proto, config: cfg });
+            addLog(`[${proto.toUpperCase()}] ${res.message}`);
+        }
+    }
 }
 
 async function stopProto(proto) {
@@ -236,9 +291,7 @@ async function startSelected() {
     const selected = getSelectedProtos();
     if (selected.length === 0) { addLog('[WARN] No protocols selected'); return; }
     for (const proto of selected) {
-        const config = getConfig(proto);
-        const res = await apiPost('/api/start', { protocol: proto, config });
-        addLog(`[${proto.toUpperCase()}] ${res.message}`);
+        await startProto(proto);
     }
 }
 
@@ -299,22 +352,52 @@ async function pollStatus() {
         const data = await resp.json();
         let totSent = 0, totRecv = 0, totReqs = 0, totErrs = 0;
 
-        for (const [proto, info] of Object.entries(data.jobs)) {
+        // Aggregate stats per base protocol (http_1, http_2 → http)
+        const protoAgg = {};
+        for (const [jobKey, info] of Object.entries(data.jobs)) {
+            const baseParts = jobKey.split('_');
+            // Determine base protocol: "ext_https_2" → "ext_https", "http_2" → "http", "http" → "http"
+            let base;
+            if (baseParts.length >= 3 && !isNaN(baseParts[baseParts.length - 1])) {
+                base = baseParts.slice(0, -1).join('_');
+            } else if (baseParts.length === 2 && !isNaN(baseParts[1])) {
+                base = baseParts[0];
+            } else {
+                base = jobKey;
+            }
+
+            if (!protoAgg[base]) protoAgg[base] = { running: false, flows: 0, remaining: -1, elapsed: 0, stats: {bytes_sent:0,bytes_recv:0,requests:0,errors:0} };
+            const agg = protoAgg[base];
+            if (info.running) { agg.running = true; agg.flows++; }
+            agg.stats.bytes_sent += info.stats.bytes_sent;
+            agg.stats.bytes_recv += info.stats.bytes_recv;
+            agg.stats.requests += info.stats.requests;
+            agg.stats.errors += info.stats.errors;
+            if (info.remaining >= 0) agg.remaining = Math.max(agg.remaining, info.remaining);
+            agg.elapsed = Math.max(agg.elapsed, info.elapsed);
+
+            totSent += info.stats.bytes_sent;
+            totRecv += info.stats.bytes_recv;
+            totReqs += info.stats.requests;
+            totErrs += info.stats.errors;
+        }
+
+        for (const [proto, agg] of Object.entries(protoAgg)) {
             const card = document.getElementById(`proto-${proto}`);
             const badge = document.getElementById(`status-${proto}`);
             const timer = document.getElementById(`timer-${proto}`);
             if (!card) continue;
 
-            if (info.running) {
+            if (agg.running) {
                 card.classList.add('running');
                 badge.classList.add('running');
-                badge.textContent = 'Running';
-                if (info.remaining >= 0) {
+                badge.textContent = agg.flows > 1 ? `${agg.flows} Flows` : 'Running';
+                if (agg.remaining >= 0) {
                     timer.style.display = '';
-                    timer.textContent = fmtTime(info.remaining);
+                    timer.textContent = fmtTime(agg.remaining);
                 } else {
                     timer.style.display = '';
-                    timer.textContent = fmtTime(info.elapsed);
+                    timer.textContent = fmtTime(agg.elapsed);
                 }
             } else {
                 card.classList.remove('running');
@@ -322,11 +405,18 @@ async function pollStatus() {
                 badge.textContent = 'Stopped';
                 timer.style.display = 'none';
             }
+        }
 
-            totSent += info.stats.bytes_sent;
-            totRecv += info.stats.bytes_recv;
-            totReqs += info.stats.requests;
-            totErrs += info.stats.errors;
+        // Reset cards with no jobs
+        for (const proto of Object.keys(PROTOCOLS)) {
+            if (!protoAgg[proto]) {
+                const card = document.getElementById(`proto-${proto}`);
+                const badge = document.getElementById(`status-${proto}`);
+                const timer = document.getElementById(`timer-${proto}`);
+                if (card) card.classList.remove('running');
+                if (badge) { badge.classList.remove('running'); badge.textContent = 'Stopped'; }
+                if (timer) timer.style.display = 'none';
+            }
         }
 
         document.getElementById('stat-sent').textContent = fmtBytes(totSent);
@@ -345,7 +435,7 @@ function addLog(msg) {
     if (logBuf.length > 300) logBuf.splice(0, 150);
     const panel = document.getElementById('log-panel');
     panel.innerHTML = logBuf.map(l => {
-        const cls = l.includes('rror') ? ' error' : '';
+        const cls = l.toLowerCase().includes('error') ? ' error' : '';
         const d = document.createElement('div');
         d.textContent = l;
         return `<div class="log-entry${cls}">${d.innerHTML}</div>`;

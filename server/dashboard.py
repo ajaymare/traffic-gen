@@ -7,6 +7,7 @@ import time
 
 import requests as http_client
 from flask import Flask, jsonify, request, render_template_string
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 
@@ -315,6 +316,8 @@ DASHBOARD_HTML = r"""
 
 <script>
 // ─── Protocol Definitions ────────────────────────────────────
+const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
+
 const PROTOCOLS = {
     http: { name: 'HTTP', fields: [
         { key: 'url', label: 'URL', type: 'text', default: 'http://server/generate/100' },
@@ -323,6 +326,12 @@ const PROTOCOLS = {
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     https: { name: 'HTTPS', fields: [
@@ -333,6 +342,12 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     http2: { name: 'HTTP/2', fields: [
@@ -343,6 +358,12 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     tcp: { name: 'TCP', fields: [
@@ -353,6 +374,12 @@ const PROTOCOLS = {
         { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
         { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     udp: { name: 'UDP', fields: [
@@ -363,53 +390,67 @@ const PROTOCOLS = {
         { key: 'use_iperf', label: 'Use iperf3', type: 'checkbox', default: false },
         { key: 'bandwidth', label: 'iperf BW', type: 'text', default: '100M' },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     ftp: { name: 'FTP', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'port', label: 'Port', type: 'number', default: 21 },
         { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
-        { key: 'password', label: 'Password', type: 'text', default: '' },
+        { key: 'password', label: 'Password', type: 'password', default: '' },
         { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin','testfile_1gb.bin'], default: 'testfile_1gb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     ssh: { name: 'SSH', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
-        { key: 'port', label: 'Port', type: 'number', default: 22 },
+        { key: 'port', label: 'Port', type: 'number', default: 2222 },
         { key: 'username', label: 'Username', type: 'text', default: 'testuser' },
-        { key: 'password', label: 'Password', type: 'text', default: 'testpass' },
+        { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
         { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     ext_https: { name: 'External HTTPS', fields: [
-        { key: 'url', label: 'Target URL', type: 'text', default: 'https://www.google.com' },
+        { key: 'urls', label: 'Target URLs (one per line)', type: 'textarea', default: 'https://www.google.com' },
         { key: 'method', label: 'Method', type: 'select', options: ['GET','POST','HEAD'], default: 'GET' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-    ]},
-    ext_tcp: { name: 'External TCP', fields: [
-        { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
-        { key: 'port', label: 'Target Port', type: 'number', default: 443 },
-        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-        { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-    ]},
-    ext_udp: { name: 'External UDP', fields: [
-        { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
-        { key: 'port', label: 'Target Port', type: 'number', default: 53 },
-        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 512 },
-        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-        { key: 'dns_mode', label: 'DNS Query Mode', type: 'checkbox', default: true },
-        { key: 'dns_domain', label: 'DNS Domain', type: 'text', default: 'example.com' },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
     icmp: { name: 'ICMP (Ping)', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
+        { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
+        { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
+        { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
+        { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
+        { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
+        { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
 };
@@ -445,7 +486,7 @@ function addClientLog(name, msg) {
     const panel = document.getElementById('log-' + name);
     if (panel) {
         panel.innerHTML = clientLogs[name].map(l => {
-            const cls = l.includes('rror') ? ' error' : '';
+            const cls = l.toLowerCase().includes('error') ? ' error' : '';
             const d = document.createElement('div');
             d.textContent = l;
             return '<div class="log-entry' + cls + '">' + d.innerHTML + '</div>';
@@ -497,6 +538,7 @@ async function renderClientTab(name) {
     for (const [proto, def] of Object.entries(PROTOCOLS)) {
         let fieldsHtml = '';
         for (const f of def.fields) {
+            if (f.key === 'flows') continue; // rendered in proto-actions
             let input;
             const id = 'c-' + name + '-' + proto + '-' + f.key;
             // Replace 'server' in defaults with client's actual server host
@@ -506,6 +548,8 @@ async function renderClientTab(name) {
                 const opts = f.options.map(o =>
                     '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>').join('');
                 input = '<select id="' + id + '">' + opts + '</select>';
+            } else if (f.type === 'textarea') {
+                input = '<textarea id="' + id + '" rows="3" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;resize:vertical;font-family:inherit">' + defVal + '</textarea>';
             } else if (f.type === 'checkbox') {
                 input = '<input type="checkbox" id="' + id + '"' + (f.default ? ' checked' : '') + '>';
             } else {
@@ -525,6 +569,9 @@ async function renderClientTab(name) {
             '<div class="proto-actions">' +
             '<button class="btn btn-start" onclick="clientStartProto(\'' + name + '\',\'' + proto + '\')">Start</button>' +
             '<button class="btn btn-stop" onclick="clientStopProto(\'' + name + '\',\'' + proto + '\')">Stop</button>' +
+            '<label style="font-size:11px;color:#666;display:flex;align-items:center;gap:4px;margin-left:8px">' +
+            'Flows <input type="number" id="c-' + name + '-' + proto + '-flows" value="1" min="1" max="20" style="width:45px;padding:2px 4px;font-size:11px">' +
+            '</label>' +
             '</div></div>';
     }
 
@@ -552,7 +599,7 @@ async function renderClientTab(name) {
         '<div class="slider-group"><label>Packet Loss <span class="slider-value" id="c-' + name + '-loss-val">0</span> %</label>' +
         '<input type="range" id="c-' + name + '-loss" min="0" max="50" value="0" step="0.5" oninput="clientUpdateSlider(\'' + name + '\',\'loss\')"></div>' +
         '<div class="slider-group"><label>Bandwidth <span class="slider-value" id="c-' + name + '-bandwidth-val">0</span> Mbps (0=unlimited)</label>' +
-        '<input type="range" id="c-' + name + '-bandwidth" min="0" max="100" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
+        '<input type="range" id="c-' + name + '-bandwidth" min="0" max="1000" step="10" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
         '</div>' +
         '<div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px">' +
@@ -598,6 +645,7 @@ async function renderClientTab(name) {
 function clientGetConfig(clientName, proto) {
     const cfg = {};
     for (const f of PROTOCOLS[proto].fields) {
+        if (f.key === 'flows') continue;
         const el = document.getElementById('c-' + clientName + '-' + proto + '-' + f.key);
         if (!el) continue;
         if (f.type === 'checkbox') cfg[f.key] = el.checked;
@@ -607,10 +655,24 @@ function clientGetConfig(clientName, proto) {
     return cfg;
 }
 
+function clientGetFlowCount(clientName, proto) {
+    const el = document.getElementById('c-' + clientName + '-' + proto + '-flows');
+    return el ? Math.max(1, Math.min(20, parseInt(el.value) || 1)) : 1;
+}
+
 async function clientStartProto(clientName, proto) {
     const config = clientGetConfig(clientName, proto);
-    const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config });
-    addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+    const flows = clientGetFlowCount(clientName, proto);
+    if (flows === 1) {
+        const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config });
+        addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+    } else {
+        for (let i = 1; i <= flows; i++) {
+            const cfg = Object.assign({}, config, { flow_id: String(i) });
+            const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config: cfg });
+            addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+        }
+    }
 }
 
 async function clientStopProto(clientName, proto) {
@@ -640,9 +702,7 @@ async function clientStartSelected(clientName) {
         document.getElementById('c-' + clientName + '-select-' + p)?.checked);
     if (!selected.length) { addClientLog(clientName, '[WARN] No protocols selected'); return; }
     for (const proto of selected) {
-        const config = clientGetConfig(clientName, proto);
-        const res = await apiPost('/api/client/' + clientName + '/start', { protocol: proto, config });
-        addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || ''));
+        await clientStartProto(clientName, proto);
     }
 }
 async function clientStopSelected(clientName) {
@@ -751,22 +811,56 @@ async function pollClientStatus(clientName) {
         const data = await resp.json();
         if (data.error) return;
         let totSent=0, totRecv=0, totReqs=0, totErrs=0;
-        for (const [proto, info] of Object.entries(data.jobs || {})) {
+        // Aggregate stats per base protocol (http_1, http_2 → http, ext_https_2 → ext_https)
+        var protoAgg = {};
+        for (const [jobKey, info] of Object.entries(data.jobs || {})) {
+            var parts = jobKey.split('_');
+            var base;
+            if (parts.length >= 3 && !isNaN(parts[parts.length - 1])) {
+                base = parts.slice(0, -1).join('_');
+            } else if (parts.length === 2 && !isNaN(parts[1])) {
+                base = parts[0];
+            } else {
+                base = jobKey;
+            }
+            if (!protoAgg[base]) protoAgg[base] = { running: false, flows: 0, remaining: -1, elapsed: 0,
+                stats: {bytes_sent:0, bytes_recv:0, requests:0, errors:0} };
+            var agg = protoAgg[base];
+            if (info.running) { agg.running = true; agg.flows++; }
+            agg.stats.bytes_sent += info.stats.bytes_sent;
+            agg.stats.bytes_recv += info.stats.bytes_recv;
+            agg.stats.requests += info.stats.requests;
+            agg.stats.errors += info.stats.errors;
+            if (info.remaining >= 0) agg.remaining = Math.max(agg.remaining, info.remaining);
+            agg.elapsed = Math.max(agg.elapsed, info.elapsed);
+            totSent += info.stats.bytes_sent; totRecv += info.stats.bytes_recv;
+            totReqs += info.stats.requests; totErrs += info.stats.errors;
+        }
+        for (const [proto, agg] of Object.entries(protoAgg)) {
             const card = document.getElementById('c-' + clientName + '-proto-' + proto);
             const badge = document.getElementById('c-' + clientName + '-status-' + proto);
             const timer = document.getElementById('c-' + clientName + '-timer-' + proto);
             if (!card) continue;
-            if (info.running) {
+            if (agg.running) {
                 card.classList.add('running'); badge.classList.add('running');
-                badge.textContent = 'Running';
+                badge.textContent = agg.flows > 1 ? agg.flows + ' Flows' : 'Running';
                 timer.style.display = '';
-                timer.textContent = info.remaining >= 0 ? fmtTime(info.remaining) : fmtTime(info.elapsed);
+                timer.textContent = agg.remaining >= 0 ? fmtTime(agg.remaining) : fmtTime(agg.elapsed);
             } else {
                 card.classList.remove('running'); badge.classList.remove('running');
                 badge.textContent = 'Stopped'; timer.style.display = 'none';
             }
-            totSent += info.stats.bytes_sent; totRecv += info.stats.bytes_recv;
-            totReqs += info.stats.requests; totErrs += info.stats.errors;
+        }
+        // Reset cards with no jobs
+        for (const proto of Object.keys(PROTOCOLS)) {
+            if (!protoAgg[proto]) {
+                const card = document.getElementById('c-' + clientName + '-proto-' + proto);
+                const badge = document.getElementById('c-' + clientName + '-status-' + proto);
+                const timer = document.getElementById('c-' + clientName + '-timer-' + proto);
+                if (card) card.classList.remove('running');
+                if (badge) { badge.classList.remove('running'); badge.textContent = 'Stopped'; }
+                if (timer) timer.style.display = 'none';
+            }
         }
         // Collect logs from all protocols
         let allLogs = [];
@@ -782,7 +876,7 @@ async function pollClientStatus(clientName) {
         if (panel && allLogs.length > 0) {
             const last50 = allLogs.slice(-50);
             panel.innerHTML = last50.map(l => {
-                const cls = l.includes('rror') ? ' error' : '';
+                const cls = l.toLowerCase().includes('error') ? ' error' : '';
                 const d = document.createElement('div');
                 d.textContent = l;
                 return '<div class="log-entry' + cls + '">' + d.innerHTML + '</div>';
@@ -964,13 +1058,15 @@ def read_json_file(path):
         return {}
 
 
-def get_active_connections():
+def get_connections_and_counts():
+    """Single ss call returning (connections_list, port_counts_dict)."""
     ports = {
         80: 'HTTP', 443: 'HTTPS', 5201: 'iperf3',
         9999: 'TCP Echo', 9998: 'UDP Echo',
-        21: 'FTP', 22: 'SSH',
+        21: 'FTP', 2222: 'SSH',
     }
     connections = []
+    counts = {}
     try:
         result = subprocess.run(
             ['ss', '-tunp', '--no-header'],
@@ -982,7 +1078,6 @@ def get_active_connections():
             parts = line.split()
             if len(parts) < 6:
                 continue
-            proto = parts[0].upper()
             state = parts[1]
             local = parts[4]
             remote = parts[5]
@@ -991,6 +1086,7 @@ def get_active_connections():
                 port_num = int(local_port)
             except ValueError:
                 continue
+            counts[port_num] = counts.get(port_num, 0) + 1
             if port_num in ports:
                 connections.append({
                     'proto': ports[port_num],
@@ -1000,32 +1096,7 @@ def get_active_connections():
                 })
     except Exception:
         pass
-    return connections
-
-
-def count_connections_by_port():
-    counts = {}
-    try:
-        result = subprocess.run(
-            ['ss', '-tun', '--no-header'],
-            capture_output=True, text=True, timeout=5
-        )
-        for line in result.stdout.strip().split('\n'):
-            if not line.strip():
-                continue
-            parts = line.split()
-            if len(parts) < 6:
-                continue
-            local = parts[4]
-            local_port = local.rsplit(':', 1)[-1]
-            try:
-                port_num = int(local_port)
-                counts[port_num] = counts.get(port_num, 0) + 1
-            except ValueError:
-                continue
-    except Exception:
-        pass
-    return counts
+    return connections, counts
 
 
 def proxy_to_client(name, path, method='GET', data=None):
@@ -1058,8 +1129,7 @@ def server_stats():
     echo = read_json_file('/tmp/echo_stats.json')
     ftp = read_json_file('/tmp/ftp_stats.json')
     ssh = read_json_file('/tmp/ssh_stats.json')
-    conn_counts = count_connections_by_port()
-    connections = get_active_connections()
+    connections, conn_counts = get_connections_and_counts()
 
     tcp_echo = echo.get('tcp', {})
     udp_echo = echo.get('udp', {})
@@ -1117,7 +1187,7 @@ def server_stats():
             }
         },
         'SSH': {
-            'active_connections': conn_counts.get(22, 0),
+            'active_connections': conn_counts.get(2222, 0),
             'stats': {
                 'sessions': ssh.get('sessions', 0),
                 'active_sessions': ssh.get('active_sessions', 0),
@@ -1146,7 +1216,7 @@ def list_clients():
 
 @app.route('/api/clients', methods=['POST'])
 def register_client():
-    data = request.json
+    data = request.json or {}
     name = data.get('name', '').strip()
     url = data.get('url', '').strip()
     if not name or not url:
@@ -1176,19 +1246,19 @@ def client_status(name):
 
 @app.route('/api/client/<name>/start', methods=['POST'])
 def client_start(name):
-    result, code = proxy_to_client(name, '/api/start', 'POST', request.json)
+    result, code = proxy_to_client(name, '/api/start', 'POST', request.json or {})
     return jsonify(result), code
 
 
 @app.route('/api/client/<name>/stop', methods=['POST'])
 def client_stop(name):
-    result, code = proxy_to_client(name, '/api/stop', 'POST', request.json)
+    result, code = proxy_to_client(name, '/api/stop', 'POST', request.json or {})
     return jsonify(result), code
 
 
 @app.route('/api/client/<name>/shaping', methods=['POST'])
 def client_shaping(name):
-    result, code = proxy_to_client(name, '/api/shaping', 'POST', request.json)
+    result, code = proxy_to_client(name, '/api/shaping', 'POST', request.json or {})
     return jsonify(result), code
 
 
@@ -1212,14 +1282,14 @@ def client_server_host(name):
 
 @app.route('/api/client/<name>/shaping/random_bandwidth', methods=['POST'])
 def client_random_bandwidth(name):
-    result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json)
+    result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json or {})
     return jsonify(result), code
 
 
 @app.route('/api/client/<name>/source_ips', methods=['GET', 'POST'])
 def client_source_ips(name):
     if request.method == 'POST':
-        result, code = proxy_to_client(name, '/api/source_ips', 'POST', request.json)
+        result, code = proxy_to_client(name, '/api/source_ips', 'POST', request.json or {})
     else:
         result, code = proxy_to_client(name, '/api/source_ips')
     return jsonify(result), code
@@ -1228,13 +1298,27 @@ def client_source_ips(name):
 FTP_DATA_DIR = '/data'
 
 
+def _safe_ftp_path(filename):
+    """Resolve a safe file path within FTP_DATA_DIR, preventing path traversal."""
+    name = secure_filename(filename)
+    if not name:
+        return None
+    resolved = os.path.realpath(os.path.join(FTP_DATA_DIR, name))
+    if not resolved.startswith(os.path.realpath(FTP_DATA_DIR)):
+        return None
+    return resolved
+
+
 @app.route('/api/files')
 def list_files():
     files = []
-    for name in sorted(os.listdir(FTP_DATA_DIR)):
-        path = os.path.join(FTP_DATA_DIR, name)
-        if os.path.isfile(path):
-            files.append({"name": name, "size": os.path.getsize(path)})
+    try:
+        for name in sorted(os.listdir(FTP_DATA_DIR)):
+            path = os.path.join(FTP_DATA_DIR, name)
+            if os.path.isfile(path):
+                files.append({"name": name, "size": os.path.getsize(path)})
+    except FileNotFoundError:
+        pass
     return jsonify({"files": files})
 
 
@@ -1245,19 +1329,21 @@ def upload_file():
     f = request.files['file']
     if not f.filename:
         return jsonify({"error": "No filename"}), 400
-    path = os.path.join(FTP_DATA_DIR, f.filename)
+    path = _safe_ftp_path(f.filename)
+    if not path:
+        return jsonify({"error": "Invalid filename"}), 400
     f.save(path)
     os.chmod(path, 0o644)
-    return jsonify({"ok": True, "filename": f.filename, "size": os.path.getsize(path)})
+    return jsonify({"ok": True, "filename": os.path.basename(path), "size": os.path.getsize(path)})
 
 
 @app.route('/api/files/<name>', methods=['DELETE'])
 def delete_file(name):
-    path = os.path.join(FTP_DATA_DIR, name)
-    if not os.path.isfile(path):
+    path = _safe_ftp_path(name)
+    if not path or not os.path.isfile(path):
         return jsonify({"error": "File not found"}), 404
     os.remove(path)
-    return jsonify({"ok": True, "message": f"Deleted {name}"})
+    return jsonify({"ok": True, "message": f"Deleted {os.path.basename(path)}"})
 
 
 if __name__ == '__main__':

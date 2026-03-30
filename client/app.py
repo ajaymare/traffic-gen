@@ -14,8 +14,10 @@ engine = TrafficEngine()
 
 SERVER_HOST = os.environ.get('SERVER_HOST', 'server')
 
-# Store current shaping settings so they persist across page refreshes
-current_shaping = {"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0}
+
+def _get_json():
+    """Safely get JSON from request, returning empty dict on None."""
+    return request.json or {}
 
 
 @app.route('/')
@@ -38,7 +40,7 @@ def status():
 
 @app.route('/api/start', methods=['POST'])
 def start_traffic():
-    data = request.json
+    data = _get_json()
     protocol = data.get('protocol')
     config = data.get('config', {})
     if not protocol:
@@ -49,7 +51,7 @@ def start_traffic():
 
 @app.route('/api/stop', methods=['POST'])
 def stop_traffic():
-    data = request.json
+    data = _get_json()
     protocol = data.get('protocol')
     if not protocol:
         return jsonify({"error": "protocol required"}), 400
@@ -62,38 +64,41 @@ def stop_traffic():
 
 @app.route('/api/shaping', methods=['POST'])
 def apply_shaping():
-    d = request.json
-    latency = int(d.get('latency_ms', 0))
-    jitter = int(d.get('jitter_ms', 0))
-    loss = float(d.get('packet_loss_pct', 0))
-    bw = int(d.get('bandwidth_mbps', 0))
+    d = _get_json()
+    try:
+        latency = int(d.get('latency_ms', 0))
+        jitter = int(d.get('jitter_ms', 0))
+        loss = float(d.get('packet_loss_pct', 0))
+        bw = int(d.get('bandwidth_mbps', 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid shaping parameters"}), 400
     network_shaper.apply_shaping(latency, jitter, loss, bw)
-    current_shaping.update({"latency_ms": latency, "jitter_ms": jitter,
-                            "packet_loss_pct": loss, "bandwidth_mbps": bw})
     return jsonify({"ok": True, "message": "Shaping applied",
-                    "settings": current_shaping})
+                    "settings": network_shaper.get_last_shaping()})
 
 
 @app.route('/api/shaping/clear', methods=['POST'])
 def clear_shaping():
     network_shaper.clear_all()
-    current_shaping.update({"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0})
     return jsonify({"ok": True, "message": "Shaping cleared"})
 
 
 @app.route('/api/shaping/current')
 def get_shaping():
-    return jsonify({**current_shaping,
+    return jsonify({**network_shaper.get_last_shaping(),
                     "random_bandwidth": network_shaper.is_random_bandwidth_running()})
 
 
 @app.route('/api/shaping/random_bandwidth', methods=['POST'])
 def toggle_random_bandwidth():
-    d = request.json
+    d = _get_json()
     enabled = d.get('enabled', False)
-    min_mbps = int(d.get('min_mbps', 20))
-    max_mbps = int(d.get('max_mbps', 1000))
-    interval = int(d.get('interval', 10))
+    try:
+        min_mbps = int(d.get('min_mbps', 20))
+        max_mbps = int(d.get('max_mbps', 1000))
+        interval = int(d.get('interval', 10))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Invalid parameters"}), 400
     if enabled:
         network_shaper.start_random_bandwidth(min_mbps, max_mbps, interval)
         return jsonify({"ok": True, "message": f"Random bandwidth {min_mbps}-{max_mbps} Mbps every {interval}s"})
@@ -105,12 +110,15 @@ def toggle_random_bandwidth():
 @app.route('/api/source_ips', methods=['GET', 'POST'])
 def source_ips():
     if request.method == 'POST':
-        d = request.json
+        d = _get_json()
         enabled = d.get('enabled', False)
         if enabled:
             base_ip = d.get('base_ip', '172.18.0.100')
             count = int(d.get('count', 5))
-            added = network_shaper.add_ip_aliases(base_ip, count)
+            try:
+                added = network_shaper.add_ip_aliases(base_ip, count)
+            except ValueError as e:
+                return jsonify({"error": str(e)}), 400
             return jsonify({"ok": True, "message": f"Added {len(added)} source IPs",
                             "ips": added})
         else:

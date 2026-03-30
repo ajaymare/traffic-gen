@@ -10,10 +10,12 @@ import ftplib
 import logging
 import threading
 import subprocess
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
 
 import requests
+from requests.adapters import HTTPAdapter
 import httpx
 import paramiko
 import urllib3
@@ -21,9 +23,51 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logger = logging.getLogger(__name__)
 
+# DSCP name → value mapping
+DSCP_VALUES = {
+    'BE': 0, 'CS1': 8, 'AF11': 10, 'AF12': 12, 'AF13': 14,
+    'CS2': 16, 'AF21': 18, 'AF22': 20, 'AF23': 22,
+    'CS3': 24, 'AF31': 26, 'AF32': 28, 'AF33': 30,
+    'CS4': 32, 'AF41': 34, 'AF42': 36, 'AF43': 38,
+    'CS5': 40, 'VA': 44, 'EF': 46, 'CS6': 48, 'CS7': 56,
+}
+
+
+def _dscp_to_tos(dscp):
+    """Convert DSCP value or name to TOS byte. DSCP occupies upper 6 bits."""
+    if isinstance(dscp, str):
+        dscp = DSCP_VALUES.get(dscp.upper(), int(dscp) if dscp.isdigit() else 0)
+    return int(dscp) << 2
+
+
+def _set_tos(sock, tos):
+    """Set IP_TOS on a socket."""
+    if tos > 0:
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_TOS, tos)
+
+
+class DscpHTTPAdapter(HTTPAdapter):
+    """HTTPAdapter that sets IP_TOS/DSCP on the underlying socket."""
+
+    def __init__(self, tos=0, **kwargs):
+        self.tos = tos
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, *args, **kwargs):
+        if self.tos > 0:
+            kwargs['socket_options'] = [
+                (socket.IPPROTO_IP, socket.IP_TOS, self.tos),
+                (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
+            ]
+        super().init_poolmanager(*args, **kwargs)
+
 
 def _random_xff():
-    """Generate a random X-Forwarded-For IP address."""
+    """Return an alias source IP if configured, otherwise a random IP."""
+    import network_shaper
+    alias_ip = network_shaper.get_random_source_ip()
+    if alias_ip:
+        return alias_ip
     return f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
 
 
@@ -37,14 +81,12 @@ class TrafficJob:
     stats: dict = field(default_factory=lambda: {
         "bytes_sent": 0, "bytes_recv": 0, "requests": 0, "errors": 0})
     config: dict = field(default_factory=dict)
-    logs: list = field(default_factory=list)
+    logs: deque = field(default_factory=lambda: deque(maxlen=500))
 
     def log(self, msg):
         ts = time.strftime('%H:%M:%S')
         entry = f"[{ts}] {msg}"
         self.logs.append(entry)
-        if len(self.logs) > 500:
-            self.logs = self.logs[-250:]
         logger.info(f"[{self.protocol}] {msg}")
 
     def should_stop(self):
@@ -79,7 +121,7 @@ class TrafficEngine:
                     "running": job.running,
                     "stats": dict(job.stats),
                     "config": dict(job.config),
-                    "logs": job.logs[-30:],
+                    "logs": list(job.logs)[-30:],
                     "elapsed": job.elapsed(),
                     "remaining": job.remaining(),
                     "duration": job.duration,
@@ -87,27 +129,45 @@ class TrafficEngine:
             return result
 
     def start_job(self, protocol, config):
+        # Support flow IDs: "http_2" → handler "_run_http", job key "http_2"
+        flow_id = config.pop('flow_id', None)
+        job_key = f"{protocol}_{flow_id}" if flow_id else protocol
+
         with self._lock:
-            if protocol in self.jobs and self.jobs[protocol].running:
-                return False, f"{protocol} already running"
+            if job_key in self.jobs and self.jobs[job_key].running:
+                return False, f"{job_key} already running"
 
             duration = int(config.pop('duration', 0))
-            job = TrafficJob(protocol=protocol, config=config,
+            job = TrafficJob(protocol=job_key, config=config,
                              duration=duration, start_time=time.time())
             job.running = True
-            self.jobs[protocol] = job
+            self.jobs[job_key] = job
 
+        # Look up handler by base protocol name (strip _N suffix)
         handler = getattr(self, f'_run_{protocol}', None)
         if not handler:
             job.running = False
             return False, f"Unknown protocol: {protocol}"
 
         thread = threading.Thread(target=self._wrapped_run,
-                                  args=(handler, job), daemon=True, name=f"traffic-{protocol}")
+                                  args=(handler, job), daemon=True, name=f"traffic-{job_key}")
         job.thread = thread
         thread.start()
         dur_str = f" for {duration}s" if duration > 0 else " (indefinite)"
-        return True, f"{protocol} started{dur_str}"
+        label = f"{protocol} (flow {flow_id})" if flow_id else protocol
+        return True, f"{label} started{dur_str}"
+
+    def _get_timing(self, cfg):
+        """Return (interval, burst_count, burst_pause) from config."""
+        rate_pps = float(cfg.get('rate_pps', 0))
+        if rate_pps > 0:
+            interval = 1.0 / rate_pps
+        else:
+            interval = float(cfg.get('interval', 1))
+        burst_enabled = cfg.get('burst_enabled', False)
+        burst_count = int(cfg.get('burst_count', 5)) if burst_enabled else 1
+        burst_pause = float(cfg.get('burst_pause', 2)) if burst_enabled else interval
+        return interval, burst_count, burst_pause
 
     def _wrapped_run(self, handler, job):
         try:
@@ -120,10 +180,19 @@ class TrafficEngine:
 
     def stop_job(self, protocol):
         with self._lock:
-            if protocol not in self.jobs or not self.jobs[protocol].running:
-                return False, f"{protocol} not running"
-            self.jobs[protocol].running = False
-        return True, f"{protocol} stopping"
+            # Direct match (e.g., "http" or "http_2")
+            if protocol in self.jobs and self.jobs[protocol].running:
+                self.jobs[protocol].running = False
+                return True, f"{protocol} stopping"
+            # Stop all flows of a base protocol (e.g., "http" stops "http_1", "http_2")
+            stopped = []
+            for key, job in self.jobs.items():
+                if key.startswith(protocol + '_') and job.running:
+                    job.running = False
+                    stopped.append(key)
+            if stopped:
+                return True, f"Stopping {', '.join(stopped)}"
+            return False, f"{protocol} not running"
 
     def stop_all(self):
         with self._lock:
@@ -144,49 +213,68 @@ class TrafficEngine:
         cfg = job.config
         url = cfg.get('url', 'http://server/generate/100')
         method = cfg.get('method', 'GET').upper()
-        interval = float(cfg.get('interval', 1))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         verify_ssl = not cfg.get('ignore_ssl', False)
         data_size_kb = int(cfg.get('data_size_kb', 0))
         upload = cfg.get('upload', False)
         random_size = cfg.get('random_size', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
-        job.log(f"{method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"{method} {url} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
         session = requests.Session()
+        if tos > 0:
+            adapter = DscpHTTPAdapter(tos=tos)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
 
         while not job.should_stop():
-            try:
-                cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                sent_bytes = 0
+                recv_bytes = 0
+                req_url = url
+                try:
+                    cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
-                headers = {'X-Forwarded-For': _random_xff()}
+                    headers = {'X-Forwarded-For': _random_xff()}
 
-                if upload and cur_size_kb > 0:
-                    data = os.urandom(cur_size_kb * 1024)
-                    resp = session.post(url, data=data, headers=headers, verify=verify_ssl, timeout=30)
-                    job.stats['bytes_sent'] += len(data)
-                elif method == 'GET':
-                    if random_size:
-                        rand_mb = random.randint(1, 100)
-                        base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
-                        cur_url = f"{base}/generate/{rand_mb}"
+                    if upload and cur_size_kb > 0:
+                        data = os.urandom(cur_size_kb * 1024)
+                        resp = session.post(url, data=data, headers=headers, verify=verify_ssl, timeout=30)
+                        sent_bytes = len(data)
+                        recv_bytes = len(resp.content)
+                        job.stats['bytes_sent'] += sent_bytes
+                    elif method == 'GET':
+                        if random_size:
+                            rand_mb = random.randint(1, 100)
+                            base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
+                            req_url = f"{base}/generate/{rand_mb}"
+                        resp = session.get(req_url, headers=headers, verify=verify_ssl, timeout=60, stream=True)
+                        recv_bytes = len(resp.content)
+                        job.stats['bytes_recv'] += recv_bytes
                     else:
-                        cur_url = url
-                    resp = session.get(cur_url, headers=headers, verify=verify_ssl, timeout=60, stream=True)
-                    content = resp.content
-                    job.stats['bytes_recv'] += len(content)
-                else:
-                    data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
-                    resp = session.request(method, url, data=data, headers=headers, verify=verify_ssl, timeout=30)
-                    job.stats['bytes_sent'] += len(data)
-                    job.stats['bytes_recv'] += len(resp.content)
+                        data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
+                        resp = session.request(method, url, data=data, headers=headers, verify=verify_ssl, timeout=30)
+                        sent_bytes = len(data)
+                        recv_bytes = len(resp.content)
+                        job.stats['bytes_sent'] += sent_bytes
+                        job.stats['bytes_recv'] += recv_bytes
 
-                job.stats['requests'] += 1
-                job.log(f"{method} {resp.status_code} — {len(resp.content)} bytes")
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"Error: {e}")
+                    job.stats['requests'] += 1
+                    job.log(f"{method} {req_url} → {resp.status_code} | sent={sent_bytes}B recv={recv_bytes}B")
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"Error: {req_url} — {e}")
 
-            time.sleep(interval)
+                if burst_count == 1:
+                    time.sleep(interval)
+            if burst_count > 1:
+                job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                time.sleep(burst_pause)
         job.log("Stopped")
 
     # ─── HTTP/2 ──────────────────────────────────────────────
@@ -195,51 +283,71 @@ class TrafficEngine:
         cfg = job.config
         url = cfg.get('url', 'https://server/')
         method = cfg.get('method', 'GET').upper()
-        interval = float(cfg.get('interval', 1))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         verify_ssl = not cfg.get('ignore_ssl', False)
         data_size_kb = int(cfg.get('data_size_kb', 0))
         upload = cfg.get('upload', False)
         random_size = cfg.get('random_size', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
-        job.log(f"HTTP/2 {method} {url} interval={interval}s verify_ssl={verify_ssl} random_size={random_size}")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"HTTP/2 {method} {url} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
-        client = httpx.Client(http2=True, verify=verify_ssl, timeout=60)
+        sock_opts = []
+        if tos > 0:
+            sock_opts = [(socket.IPPROTO_IP, socket.IP_TOS, tos)]
+        client = httpx.Client(http2=True, verify=verify_ssl, timeout=60,
+                              transport=httpx.HTTPTransport(socket_options=sock_opts) if sock_opts else None)
 
-        while not job.should_stop():
-            try:
-                cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
+        try:
+            while not job.should_stop():
+                for _ in range(burst_count):
+                    if job.should_stop():
+                        break
+                    sent_bytes = 0
+                    recv_bytes = 0
+                    req_url = url
+                    try:
+                        cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
 
-                headers = {'X-Forwarded-For': _random_xff()}
+                        headers = {'X-Forwarded-For': _random_xff()}
 
-                if upload and cur_size_kb > 0:
-                    data = os.urandom(cur_size_kb * 1024)
-                    resp = client.post(url, content=data, headers=headers)
-                    job.stats['bytes_sent'] += len(data)
-                elif method == 'GET':
-                    if random_size:
-                        rand_mb = random.randint(1, 100)
-                        base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
-                        cur_url = f"{base}/generate/{rand_mb}"
-                    else:
-                        cur_url = url
-                    resp = client.get(cur_url, headers=headers)
-                    job.stats['bytes_recv'] += len(resp.content)
-                else:
-                    data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
-                    resp = client.request(method, url, content=data, headers=headers)
-                    job.stats['bytes_sent'] += len(data)
-                    job.stats['bytes_recv'] += len(resp.content)
+                        if upload and cur_size_kb > 0:
+                            data = os.urandom(cur_size_kb * 1024)
+                            resp = client.post(url, content=data, headers=headers)
+                            sent_bytes = len(data)
+                            recv_bytes = len(resp.content)
+                            job.stats['bytes_sent'] += sent_bytes
+                        elif method == 'GET':
+                            if random_size:
+                                rand_mb = random.randint(1, 100)
+                                base = url.rsplit('/generate/', 1)[0] if '/generate/' in url else url.rstrip('/')
+                                req_url = f"{base}/generate/{rand_mb}"
+                            resp = client.get(req_url, headers=headers)
+                            recv_bytes = len(resp.content)
+                            job.stats['bytes_recv'] += recv_bytes
+                        else:
+                            data = os.urandom(cur_size_kb * 1024) if cur_size_kb > 0 else b''
+                            resp = client.request(method, url, content=data, headers=headers)
+                            sent_bytes = len(data)
+                            recv_bytes = len(resp.content)
+                            job.stats['bytes_sent'] += sent_bytes
+                            job.stats['bytes_recv'] += recv_bytes
 
-                h2_used = resp.http_version == 'HTTP/2'
-                job.stats['requests'] += 1
-                job.log(f"{method} {resp.status_code} ({resp.http_version}) — {len(resp.content)} bytes")
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"Error: {e}")
+                        job.stats['requests'] += 1
+                        job.log(f"{method} {req_url} → {resp.status_code} ({resp.http_version}) | sent={sent_bytes}B recv={recv_bytes}B")
+                    except Exception as e:
+                        job.stats['errors'] += 1
+                        job.log(f"Error: {req_url} — {e}")
 
-            time.sleep(interval)
-
-        client.close()
+                    if burst_count == 1:
+                        time.sleep(interval)
+                if burst_count > 1:
+                    job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                    time.sleep(burst_pause)
+        finally:
+            client.close()
         job.log("Stopped")
 
     # ─── TCP ────────────────────────────────────────────────
@@ -249,37 +357,54 @@ class TrafficEngine:
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 9999))
         msg_size = int(cfg.get('msg_size', 1024))
-        interval = float(cfg.get('interval', 0.5))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         random_size = cfg.get('random_size', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
         if cfg.get('use_iperf', False):
             self._run_iperf(job, host, 'tcp')
             return
 
-        job.log(f"TCP echo {host}:{port} msg_size={msg_size} random_size={random_size}")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"TCP echo {host}:{port} msg_size={msg_size} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
         while not job.should_stop():
+            sock = None
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(10)
+                _set_tos(sock, tos)
                 sock.connect((host, port))
                 job.log(f"Connected to {host}:{port}")
 
                 while not job.should_stop():
-                    cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
-                    data = os.urandom(cur_size)
-                    sock.sendall(data)
-                    job.stats['bytes_sent'] += len(data)
-                    resp = sock.recv(65536)
-                    job.stats['bytes_recv'] += len(resp)
-                    job.stats['requests'] += 1
-                    time.sleep(interval)
-
-                sock.close()
+                    for _ in range(burst_count):
+                        if job.should_stop():
+                            break
+                        cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
+                        data = os.urandom(cur_size)
+                        sock.sendall(data)
+                        job.stats['bytes_sent'] += len(data)
+                        resp = sock.recv(65536)
+                        job.stats['bytes_recv'] += len(resp)
+                        job.stats['requests'] += 1
+                        job.log(f"TCP {host}:{port} → sent={len(data)}B recv={len(resp)}B")
+                        if burst_count == 1:
+                            time.sleep(interval)
+                    if burst_count > 1:
+                        job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                        time.sleep(burst_pause)
             except Exception as e:
                 job.stats['errors'] += 1
-                job.log(f"TCP error: {e}")
+                job.log(f"TCP error: {host}:{port} — {e}")
                 time.sleep(2)
+            finally:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
         job.log("Stopped")
 
     # ─── UDP ────────────────────────────────────────────────
@@ -289,32 +414,45 @@ class TrafficEngine:
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 9998))
         msg_size = int(cfg.get('msg_size', 1024))
-        interval = float(cfg.get('interval', 0.5))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         random_size = cfg.get('random_size', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
         if cfg.get('use_iperf', False):
             self._run_iperf(job, host, 'udp')
             return
 
-        job.log(f"UDP echo {host}:{port} msg_size={msg_size} random_size={random_size}")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"UDP echo {host}:{port} msg_size={msg_size} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)
+        _set_tos(sock, tos)
 
         while not job.should_stop():
-            try:
-                cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
-                data = os.urandom(cur_size)
-                sock.sendto(data, (host, port))
-                job.stats['bytes_sent'] += len(data)
-                resp, _ = sock.recvfrom(65536)
-                job.stats['bytes_recv'] += len(resp)
-                job.stats['requests'] += 1
-            except socket.timeout:
-                job.stats['errors'] += 1
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"UDP error: {e}")
-            time.sleep(interval)
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                try:
+                    cur_size = random.randint(64, max(msg_size, 65536)) if random_size else msg_size
+                    data = os.urandom(cur_size)
+                    sock.sendto(data, (host, port))
+                    job.stats['bytes_sent'] += len(data)
+                    resp, _ = sock.recvfrom(65536)
+                    job.stats['bytes_recv'] += len(resp)
+                    job.stats['requests'] += 1
+                    job.log(f"UDP {host}:{port} → sent={len(data)}B recv={len(resp)}B")
+                except socket.timeout:
+                    job.stats['errors'] += 1
+                    job.log(f"UDP {host}:{port} → sent={cur_size}B recv=timeout")
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"UDP error: {host}:{port} — {e}")
+                if burst_count == 1:
+                    time.sleep(interval)
+            if burst_count > 1:
+                job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                time.sleep(burst_pause)
 
         sock.close()
         job.log("Stopped")
@@ -329,47 +467,79 @@ class TrafficEngine:
 
     # ─── iperf3 helper ──────────────────────────────────────
 
+    # Server runs iperf3 on ports 5201-5203 for concurrent clients
+    IPERF_PORTS = [5201, 5202, 5203]
+
     def _run_iperf_full(self, job, proto):
         cfg = job.config
         host = cfg.get('host', 'server')
-        port = int(cfg.get('port', 5201))
+        base_port = int(cfg.get('port', 5201))
         bandwidth = cfg.get('bandwidth', '100M')
         parallel = int(cfg.get('parallel', 1))
         reverse = cfg.get('reverse', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
         duration = job.duration if job.duration > 0 else 3600
 
-        cmd = ['iperf3', '-c', host, '-p', str(port), '-b', bandwidth,
-               '-t', str(duration), '-P', str(parallel)]
-        if proto == 'udp':
-            cmd.append('-u')
-        if reverse:
-            cmd.append('-R')
+        # Try configured port first, then fall back to other iperf3 ports
+        ports_to_try = [base_port] + [p for p in self.IPERF_PORTS if p != base_port]
 
-        job.log(f"iperf3 {proto.upper()} → {host}:{port} bw={bandwidth} "
-                f"parallel={parallel} reverse={reverse} duration={duration}s")
+        for port in ports_to_try:
+            if job.should_stop():
+                return
 
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            while not job.should_stop() and proc.poll() is None:
-                time.sleep(1)
-            if proc.poll() is None:
-                proc.terminate()
-                proc.wait(timeout=5)
-            stdout = proc.stdout.read()
-            stderr = proc.stderr.read()
-            job.log(f"iperf3 done (exit={proc.returncode})")
-            if stdout:
-                # Parse summary lines
-                for line in stdout.split('\n'):
-                    if 'sender' in line or 'receiver' in line or 'SUM' in line:
-                        job.log(line.strip())
-                if 'sender' not in stdout and 'receiver' not in stdout:
-                    job.log(stdout[-500:])
-            if stderr:
-                job.log(f"stderr: {stderr[:300]}")
-        except Exception as e:
-            job.stats['errors'] += 1
-            job.log(f"iperf3 error: {e}")
+            cmd = ['iperf3', '-c', host, '-p', str(port), '-b', bandwidth,
+                   '-t', str(duration), '-P', str(parallel)]
+            if proto == 'udp':
+                cmd.append('-u')
+            if reverse:
+                cmd.append('-R')
+            if tos > 0:
+                cmd.extend(['-S', str(tos)])
+
+            job.log(f"iperf3 {proto.upper()} → {host}:{port} bw={bandwidth} "
+                    f"parallel={parallel} reverse={reverse} duration={duration}s")
+
+            try:
+                proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                # Stream stdout lines in real-time for live activity logs
+                while not job.should_stop() and proc.poll() is None:
+                    line = proc.stdout.readline()
+                    if line:
+                        stripped = line.strip()
+                        # Log interval lines (contain transfer stats) and summary
+                        if stripped and ('sec' in stripped or 'sender' in stripped or 'receiver' in stripped):
+                            job.log(f"iperf3 :{port} | {stripped}")
+                    else:
+                        time.sleep(0.5)
+                if proc.poll() is None:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                # Read any remaining output
+                remaining = proc.stdout.read()
+                stderr = proc.stderr.read()
+
+                # If server was busy, try the next port
+                if proc.returncode != 0 and 'server is busy' in (stderr or ''):
+                    job.log(f"Port {port} busy, trying next...")
+                    continue
+
+                if remaining:
+                    for line in remaining.split('\n'):
+                        stripped = line.strip()
+                        if stripped and ('sec' in stripped or 'sender' in stripped or 'receiver' in stripped):
+                            job.log(f"iperf3 :{port} | {stripped}")
+                if stderr and proc.returncode != 0:
+                    job.log(f"iperf3 :{port} error: {stderr[:300]}")
+                job.log(f"iperf3 done on port {port} (exit={proc.returncode})")
+                job.log("Stopped")
+                return
+            except Exception as e:
+                job.stats['errors'] += 1
+                job.log(f"iperf3 error on port {port}: {e}")
+
+        job.log("All iperf3 ports busy — could not connect")
+        job.stats['errors'] += 1
         job.log("Stopped")
 
     def _run_iperf(self, job, host, proto):
@@ -387,14 +557,18 @@ class TrafficEngine:
         password = cfg.get('password', '')
         filename = cfg.get('filename', 'testfile_1gb.bin')
         random_size = cfg.get('random_size', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
         ftp_files = ['testfile_100mb.bin', 'testfile_1gb.bin']
 
-        job.log(f"FTP continuous download from {host}:{port} random_size={random_size}")
+        job.log(f"FTP continuous download from {host}:{port} random_size={random_size} DSCP={dscp}(TOS={tos})")
 
         while not job.should_stop():
             try:
                 ftp = ftplib.FTP()
                 ftp.connect(host, port, timeout=30)
+                if tos > 0:
+                    _set_tos(ftp.sock, tos)
                 ftp.login(username, password)
                 ftp.set_pasv(True)
 
@@ -403,13 +577,19 @@ class TrafficEngine:
                 job.log(f"Connected — downloading {cur_file} ({size} bytes)")
 
                 bytes_recv = 0
+                last_log_bytes = 0
+                LOG_INTERVAL = 1024 * 1024  # log every 1MB
 
                 def callback(data):
-                    nonlocal bytes_recv
+                    nonlocal bytes_recv, last_log_bytes
                     if job.should_stop():
                         raise StopIteration("Duration reached")
                     bytes_recv += len(data)
                     job.stats['bytes_recv'] += len(data)
+                    if bytes_recv - last_log_bytes >= LOG_INTERVAL:
+                        pct = f" ({bytes_recv * 100 // size}%)" if size > 0 else ""
+                        job.log(f"FTP {cur_file} ← recv={bytes_recv}B{pct}")
+                        last_log_bytes = bytes_recv
 
                 try:
                     ftp.retrbinary(f'RETR {cur_file}', callback, blocksize=65536)
@@ -417,7 +597,7 @@ class TrafficEngine:
                     pass
 
                 job.stats['requests'] += 1
-                job.log(f"Download pass complete: {bytes_recv} bytes")
+                job.log(f"FTP {cur_file} ← download complete: {bytes_recv}B")
                 ftp.quit()
             except StopIteration:
                 break
@@ -437,34 +617,62 @@ class TrafficEngine:
     def _run_ssh(self, job: TrafficJob):
         cfg = job.config
         host = cfg.get('host', 'server')
-        port = int(cfg.get('port', 22))
+        port = int(cfg.get('port', 2222))
         username = cfg.get('username', 'testuser')
         password = cfg.get('password', 'testpass')
         command = cfg.get('command', 'uptime')
-        interval = float(cfg.get('interval', 5))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
-        job.log(f"SSH {username}@{host}:{port} cmd='{command}' every {interval}s")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"SSH {username}@{host}:{port} cmd='{command}' interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
         while not job.should_stop():
-            try:
-                client = paramiko.SSHClient()
-                client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                client.connect(host, port=port, username=username,
-                               password=password, timeout=10,
-                               allow_agent=False, look_for_keys=False)
-                stdin, stdout, stderr = client.exec_command(command, timeout=10)
-                out = stdout.read().decode().strip()
-                err = stderr.read().decode().strip()
-                job.stats['requests'] += 1
-                job.stats['bytes_recv'] += len(out)
-                job.log(f"Output: {out[:200]}")
-                if err:
-                    job.log(f"Stderr: {err[:200]}")
-                client.close()
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"SSH error: {e}")
-            time.sleep(interval)
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                sock = None
+                client = None
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(10)
+                    _set_tos(sock, tos)
+                    sock.connect((host, port))
+                    client = paramiko.SSHClient()
+                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    client.connect(host, port=port, username=username,
+                                   password=password, timeout=10,
+                                   allow_agent=False, look_for_keys=False,
+                                   sock=sock)
+                    stdin, stdout, stderr = client.exec_command(command, timeout=10)
+                    out = stdout.read().decode().strip()
+                    err = stderr.read().decode().strip()
+                    exit_code = stdout.channel.recv_exit_status()
+                    job.stats['requests'] += 1
+                    job.stats['bytes_recv'] += len(out)
+                    job.log(f"SSH {username}@{host} $ {command} → exit={exit_code} | recv={len(out)}B | {out[:150]}")
+                    if err:
+                        job.log(f"SSH stderr: {err[:200]}")
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"SSH error: {username}@{host}:{port} — {e}")
+                finally:
+                    if client:
+                        try:
+                            client.close()
+                        except Exception:
+                            pass
+                    elif sock:
+                        try:
+                            sock.close()
+                        except Exception:
+                            pass
+                if burst_count == 1:
+                    time.sleep(interval)
+            if burst_count > 1:
+                job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                time.sleep(burst_pause)
 
         job.log("Stopped")
 
@@ -472,124 +680,57 @@ class TrafficEngine:
 
     def _run_ext_https(self, job: TrafficJob):
         cfg = job.config
-        url = cfg.get('url', 'https://www.google.com')
+        # Support multi-URL: 'urls' textarea (newline/comma separated) or legacy 'url' field
+        raw = cfg.get('urls', cfg.get('url', 'https://www.google.com'))
+        urls = [u.strip() for u in raw.replace(',', '\n').split('\n') if u.strip()]
+        if not urls:
+            job.log("No URLs configured")
+            return
         method = cfg.get('method', 'GET').upper()
-        interval = float(cfg.get('interval', 1))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         verify_ssl = not cfg.get('ignore_ssl', False)
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
-        job.log(f"External HTTPS {method} {url} interval={interval}s")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"External HTTPS {method} → {len(urls)} URL(s) interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        for i, u in enumerate(urls):
+            job.log(f"  URL[{i}]: {u}")
 
         session = requests.Session()
+        if tos > 0:
+            adapter = DscpHTTPAdapter(tos=tos)
+            session.mount('http://', adapter)
+            session.mount('https://', adapter)
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         })
 
+        url_index = 0
         while not job.should_stop():
-            try:
-                headers = {'X-Forwarded-For': _random_xff()}
-                if method == 'GET':
-                    resp = session.get(url, headers=headers, verify=verify_ssl, timeout=30)
-                else:
-                    resp = session.request(method, url, headers=headers, verify=verify_ssl, timeout=30)
-                job.stats['bytes_recv'] += len(resp.content)
-                job.stats['requests'] += 1
-                job.log(f"{method} {resp.status_code} — {len(resp.content)} bytes ({url})")
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"Error: {e}")
-            time.sleep(interval)
-        job.log("Stopped")
-
-    # ─── External TCP ─────────────────────────────────────
-
-    def _run_ext_tcp(self, job: TrafficJob):
-        cfg = job.config
-        host = cfg.get('host', '1.1.1.1')
-        port = int(cfg.get('port', 443))
-        msg_size = int(cfg.get('msg_size', 1024))
-        interval = float(cfg.get('interval', 1))
-
-        job.log(f"External TCP {host}:{port} msg_size={msg_size}")
-
-        while not job.should_stop():
-            try:
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                sock.settimeout(10)
-                sock.connect((host, port))
-                job.log(f"Connected to {host}:{port}")
-
-                while not job.should_stop():
-                    data = os.urandom(msg_size)
-                    sock.sendall(data)
-                    job.stats['bytes_sent'] += len(data)
-                    job.stats['requests'] += 1
-                    try:
-                        resp = sock.recv(65536)
-                        job.stats['bytes_recv'] += len(resp)
-                        if not resp:
-                            job.log("Connection closed by remote")
-                            break
-                    except socket.timeout:
-                        pass
-                    time.sleep(interval)
-
-                sock.close()
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"TCP error: {e}")
-                time.sleep(2)
-        job.log("Stopped")
-
-    # ─── External UDP ─────────────────────────────────────
-
-    def _run_ext_udp(self, job: TrafficJob):
-        cfg = job.config
-        host = cfg.get('host', '1.1.1.1')
-        port = int(cfg.get('port', 53))
-        msg_size = int(cfg.get('msg_size', 512))
-        interval = float(cfg.get('interval', 1))
-        dns_mode = cfg.get('dns_mode', False)
-        dns_domain = cfg.get('dns_domain', 'example.com')
-
-        job.log(f"External UDP {host}:{port} msg_size={msg_size} dns_mode={dns_mode}")
-
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5)
-
-        while not job.should_stop():
-            try:
-                if dns_mode:
-                    # Build a simple DNS A query
-                    import struct
-                    txn_id = random.randint(0, 65535)
-                    flags = 0x0100  # standard query, recursion desired
-                    header = struct.pack('>HHHHHH', txn_id, flags, 1, 0, 0, 0)
-                    qname = b''
-                    for part in dns_domain.split('.'):
-                        qname += bytes([len(part)]) + part.encode()
-                    qname += b'\x00'
-                    question = qname + struct.pack('>HH', 1, 1)  # A record, IN class
-                    data = header + question
-                else:
-                    data = os.urandom(msg_size)
-
-                sock.sendto(data, (host, port))
-                job.stats['bytes_sent'] += len(data)
-                job.stats['requests'] += 1
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                url = urls[url_index % len(urls)]
+                url_index += 1
                 try:
-                    resp, _ = sock.recvfrom(65536)
-                    job.stats['bytes_recv'] += len(resp)
-                    if dns_mode:
-                        job.log(f"DNS query {dns_domain} → {len(resp)} bytes response")
-                except socket.timeout:
-                    pass
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"UDP error: {e}")
-            time.sleep(interval)
-
-        sock.close()
+                    headers = {'X-Forwarded-For': _random_xff()}
+                    if method == 'GET':
+                        resp = session.get(url, headers=headers, verify=verify_ssl, timeout=30)
+                    else:
+                        resp = session.request(method, url, headers=headers, verify=verify_ssl, timeout=30)
+                    job.stats['bytes_recv'] += len(resp.content)
+                    job.stats['requests'] += 1
+                    job.log(f"{method} {resp.status_code} — {len(resp.content)}B ({url})")
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"Error: {url} — {e}")
+                if burst_count == 1:
+                    time.sleep(interval)
+            if burst_count > 1:
+                job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                time.sleep(burst_pause)
         job.log("Stopped")
 
     # ─── ICMP ───────────────────────────────────────────────
@@ -597,30 +738,42 @@ class TrafficEngine:
     def _run_icmp(self, job: TrafficJob):
         cfg = job.config
         host = cfg.get('host', 'server')
-        interval = float(cfg.get('interval', 1))
+        interval, burst_count, burst_pause = self._get_timing(cfg)
         packet_size = int(cfg.get('packet_size', 64))
+        dscp = cfg.get('dscp', 'BE')
+        tos = _dscp_to_tos(dscp)
 
-        job.log(f"Ping {host} size={packet_size} interval={interval}s")
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        job.log(f"Ping {host} size={packet_size} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
         while not job.should_stop():
-            try:
-                cmd = ['ping', '-c', '1', '-W', '3', '-s', str(packet_size), host]
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
-                job.stats['requests'] += 1
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                try:
+                    cmd = ['ping', '-c', '1', '-W', '3', '-s', str(packet_size), host]
+                    if tos > 0:
+                        cmd.extend(['-Q', str(tos)])
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    job.stats['requests'] += 1
 
-                if result.returncode == 0:
-                    for line in result.stdout.split('\n'):
-                        if 'time=' in line:
-                            job.log(line.strip())
-                            break
-                    job.stats['bytes_sent'] += packet_size
-                    job.stats['bytes_recv'] += packet_size
-                else:
+                    if result.returncode == 0:
+                        for line in result.stdout.split('\n'):
+                            if 'time=' in line:
+                                job.log(f"ICMP {host} → {line.strip()}")
+                                break
+                        job.stats['bytes_sent'] += packet_size
+                        job.stats['bytes_recv'] += packet_size
+                    else:
+                        job.stats['errors'] += 1
+                        job.log(f"ICMP {host} → failed: {result.stderr.strip()}")
+                except Exception as e:
                     job.stats['errors'] += 1
-                    job.log(f"Ping failed: {result.stderr.strip()}")
-            except Exception as e:
-                job.stats['errors'] += 1
-                job.log(f"Ping error: {e}")
-            time.sleep(interval)
+                    job.log(f"ICMP {host} → error: {e}")
+                if burst_count == 1:
+                    time.sleep(interval)
+            if burst_count > 1:
+                job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                time.sleep(burst_pause)
 
         job.log("Stopped")

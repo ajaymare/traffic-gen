@@ -98,7 +98,7 @@ def parse_ssh_log():
     # Count active SSH sessions via who or ss
     try:
         result = subprocess.run(
-            ['ss', '-tn', 'state', 'established', 'sport', '=', ':22'],
+            ['ss', '-tn', 'state', 'established', 'sport', '=', ':2222'],
             capture_output=True, text=True, timeout=5
         )
         ssh_stats['active_sessions'] = max(0, len(result.stdout.strip().split('\n')) - 1)

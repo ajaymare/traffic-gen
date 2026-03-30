@@ -37,6 +37,9 @@ RUN mkdir -p /data/uploads && \
     dd if=/dev/urandom of=/data/testfile_1gb.bin bs=1M count=1024 && \
     chown -R ftp:ftp /data
 
-EXPOSE 80 443 5201 5201/udp 9999 9998/udp 21 21100-21110 22 8082
+EXPOSE 80 443 5201-5203 5201-5203/udp 9999 9998/udp 21 21100-21110 2222 8082
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

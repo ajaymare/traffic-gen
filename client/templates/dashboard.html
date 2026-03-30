@@ -47,7 +47,7 @@
                 </div>
                 <div class="slider-group">
                     <label>Bandwidth <span class="slider-value" id="bandwidth-val">0</span> Mbps (0=unlimited)</label>
-                    <input type="range" id="bandwidth" min="0" max="100" value="0" oninput="updateSlider('bandwidth')">
+                    <input type="range" id="bandwidth" min="0" max="1000" value="0" step="10" oninput="updateSlider('bandwidth')">
                 </div>
             </div>
             <div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">
@@ -109,7 +109,7 @@
 
 </div>
 
-<script>const SERVER_HOST = "{{ server_host }}";</script>
+<script>const SERVER_HOST = {{ server_host | tojson }};</script>
 <script src="/static/app.js"></script>
 </body>
 </html>
