@@ -362,10 +362,6 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
-        if cfg.get('use_iperf', False):
-            self._run_iperf(job, host, 'tcp')
-            return
-
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
         job.log(f"TCP echo {host}:{port} msg_size={msg_size} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
@@ -418,10 +414,6 @@ class TrafficEngine:
         random_size = cfg.get('random_size', False)
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
-
-        if cfg.get('use_iperf', False):
-            self._run_iperf(job, host, 'udp')
-            return
 
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
         job.log(f"UDP echo {host}:{port} msg_size={msg_size} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
@@ -545,10 +537,6 @@ class TrafficEngine:
         job.stats['errors'] += 1
         job.log("Stopped")
 
-    def _run_iperf(self, job, host, proto):
-        """Legacy helper for TCP/UDP cards with use_iperf checkbox."""
-        job.config['host'] = host
-        self._run_iperf_full(job, proto)
 
     # ─── FTP ────────────────────────────────────────────────
 
