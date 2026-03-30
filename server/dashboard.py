@@ -45,37 +45,37 @@ DASHBOARD_HTML = r"""
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0f172a; color: #e2e8f0; min-height: 100vh;
+            background: #f0f2f5; color: #1a1a2e; min-height: 100vh;
         }
         .header {
-            background: linear-gradient(135deg, #1e293b, #334155);
-            padding: 16px 24px; border-bottom: 1px solid #475569;
+            background: linear-gradient(135deg, #1a1a2e, #2d2d44);
+            padding: 16px 24px; border-bottom: 2px solid #FA582D;
             display: flex; align-items: center; justify-content: space-between;
         }
-        .header h1 { font-size: 20px; font-weight: 600; color: #f97316; }
-        .header .status { font-size: 12px; color: #94a3b8; }
+        .header h1 { font-size: 20px; font-weight: 600; color: #FA582D; }
+        .header .status { font-size: 12px; color: #ccc; }
 
         /* Tabs */
         .tab-bar {
-            background: #1e293b; border-bottom: 1px solid #475569;
+            background: #ffffff; border-bottom: 1px solid #e0e0e0;
             display: flex; align-items: center; padding: 0 16px; gap: 0;
-            overflow-x: auto;
+            overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
         .tab {
             padding: 10px 20px; cursor: pointer; font-size: 13px; font-weight: 500;
-            color: #94a3b8; border-bottom: 2px solid transparent;
+            color: #666; border-bottom: 2px solid transparent;
             white-space: nowrap; transition: all 0.2s;
         }
-        .tab:hover { color: #e2e8f0; background: #334155; }
-        .tab.active { color: #f97316; border-bottom-color: #f97316; }
-        .tab.server-tab { color: #38bdf8; }
-        .tab.server-tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+        .tab:hover { color: #1a1a2e; background: #f5f5f5; }
+        .tab.active { color: #FA582D; border-bottom-color: #FA582D; }
+        .tab.server-tab { color: #00C4B3; }
+        .tab.server-tab.active { color: #00C4B3; border-bottom-color: #00C4B3; }
         .tab-add {
             padding: 6px 14px; cursor: pointer; font-size: 16px; font-weight: 700;
-            color: #22c55e; border: 1px solid #22c55e; border-radius: 4px;
+            color: #00C4B3; border: 1px solid #00C4B3; border-radius: 4px;
             background: transparent; margin-left: 8px;
         }
-        .tab-add:hover { background: #22c55e; color: #fff; }
+        .tab-add:hover { background: #00C4B3; color: #fff; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
@@ -84,88 +84,90 @@ DASHBOARD_HTML = r"""
             display: flex; flex-direction: column; gap: 20px;
         }
         .card {
-            background: #1e293b; border: 1px solid #334155;
+            background: #ffffff; border: 1px solid #e0e0e0;
             border-radius: 8px; overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
         .card-header {
-            padding: 12px 16px; background: #334155;
-            font-weight: 600; font-size: 14px;
+            padding: 12px 16px; background: #f7f8fa;
+            font-weight: 600; font-size: 14px; color: #1a1a2e;
             display: flex; align-items: center; justify-content: space-between;
+            border-bottom: 1px solid #e0e0e0;
         }
         .card-body { padding: 16px; }
 
         /* Stats */
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .stat-box {
-            background: #0f172a; border: 1px solid #334155;
+            background: #f7f8fa; border: 1px solid #e0e0e0;
             border-radius: 6px; padding: 10px; text-align: center;
         }
-        .stat-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
-        .stat-value { font-size: 16px; font-weight: 700; color: #f97316; }
-        .stat-value.client-val { color: #38bdf8; }
+        .stat-label { font-size: 11px; color: #666; margin-bottom: 4px; }
+        .stat-value { font-size: 16px; font-weight: 700; color: #FA582D; }
+        .stat-value.client-val { color: #00C4B3; }
 
         /* Services grid */
         .services-grid {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
         }
         .service-card {
-            background: #0f172a; border: 1px solid #334155;
+            background: #f7f8fa; border: 1px solid #e0e0e0;
             border-radius: 6px; padding: 12px;
         }
         .service-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 8px;
         }
-        .service-name { font-weight: 600; font-size: 14px; color: #f97316; text-transform: uppercase; }
+        .service-name { font-weight: 600; font-size: 14px; color: #FA582D; text-transform: uppercase; }
         .service-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
-        .service-badge.active { background: #166534; color: #86efac; }
-        .service-badge.idle { background: #475569; color: #94a3b8; }
+        .service-badge.active { background: #d4f5e9; color: #0d7a4f; }
+        .service-badge.idle { background: #e8e8e8; color: #888; }
         .service-stat {
             display: flex; justify-content: space-between;
-            font-size: 12px; padding: 3px 0; border-bottom: 1px solid #1e293b;
+            font-size: 12px; padding: 3px 0; border-bottom: 1px solid #eee;
         }
-        .service-stat-label { color: #94a3b8; }
-        .service-stat-value { color: #e2e8f0; font-weight: 500; }
+        .service-stat-label { color: #888; }
+        .service-stat-value { color: #1a1a2e; font-weight: 500; }
 
         /* Connections table */
         .connections-table { width: 100%; border-collapse: collapse; font-size: 12px; }
         .connections-table th {
-            text-align: left; padding: 6px 8px; background: #0f172a;
-            color: #94a3b8; font-weight: 500; border-bottom: 1px solid #334155;
+            text-align: left; padding: 6px 8px; background: #f7f8fa;
+            color: #666; font-weight: 500; border-bottom: 1px solid #e0e0e0;
         }
         .connections-table td {
-            padding: 5px 8px; border-bottom: 1px solid #1e293b; color: #e2e8f0;
+            padding: 5px 8px; border-bottom: 1px solid #eee; color: #1a1a2e;
         }
-        .connections-table tr:hover td { background: #334155; }
+        .connections-table tr:hover td { background: #f0f2f5; }
 
         /* Protocol cards (client tabs) */
         .protocol-grid {
             display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
         }
         .proto-card {
-            background: #0f172a; border: 1px solid #334155;
+            background: #f7f8fa; border: 1px solid #e0e0e0;
             border-radius: 6px; padding: 12px;
         }
-        .proto-card.running { border-color: #22c55e; }
+        .proto-card.running { border-color: #00C4B3; border-width: 2px; }
         .proto-header {
             display: flex; align-items: center; justify-content: space-between;
             margin-bottom: 10px;
         }
         .proto-select { display: flex; align-items: center; gap: 8px; }
-        .proto-checkbox { width: 16px; height: 16px; accent-color: #38bdf8; cursor: pointer; }
-        .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #38bdf8; }
-        .proto-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #475569; }
-        .proto-badge.running { background: #166534; color: #86efac; }
-        .proto-badge.countdown { background: #854d0e; color: #fde68a; font-variant-numeric: tabular-nums; }
+        .proto-checkbox { width: 16px; height: 16px; accent-color: #FA582D; cursor: pointer; }
+        .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #1a1a2e; }
+        .proto-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8e8e8; color: #888; }
+        .proto-badge.running { background: #d4f5e9; color: #0d7a4f; }
+        .proto-badge.countdown { background: #fff3e0; color: #e65100; font-variant-numeric: tabular-nums; }
         .proto-fields { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
         .field-row { display: flex; align-items: center; gap: 8px; }
-        .field-row label { font-size: 12px; color: #94a3b8; min-width: 90px; }
+        .field-row label { font-size: 12px; color: #666; min-width: 90px; }
         .field-row input, .field-row select {
-            flex: 1; padding: 4px 8px; background: #1e293b;
-            border: 1px solid #475569; border-radius: 4px;
-            color: #e2e8f0; font-size: 12px;
+            flex: 1; padding: 4px 8px; background: #ffffff;
+            border: 1px solid #d0d0d0; border-radius: 4px;
+            color: #1a1a2e; font-size: 12px;
         }
-        .field-row input[type="checkbox"] { flex: none; width: 16px; height: 16px; }
+        .field-row input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #FA582D; }
         .proto-actions { display: flex; gap: 6px; }
         .bulk-actions { display: flex; gap: 6px; }
 
@@ -173,11 +175,11 @@ DASHBOARD_HTML = r"""
         .shaping-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
         .slider-group { display: flex; flex-direction: column; gap: 4px; }
         .slider-group label {
-            font-size: 12px; color: #94a3b8;
+            font-size: 12px; color: #666;
             display: flex; justify-content: space-between;
         }
-        .slider-group input[type="range"] { width: 100%; accent-color: #38bdf8; }
-        .slider-value { color: #38bdf8; font-weight: 600; }
+        .slider-group input[type="range"] { width: 100%; accent-color: #FA582D; }
+        .slider-value { color: #FA582D; font-weight: 600; }
         .shaping-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
 
         /* Buttons */
@@ -185,41 +187,42 @@ DASHBOARD_HTML = r"""
             padding: 6px 14px; border: none; border-radius: 4px;
             cursor: pointer; font-size: 12px; font-weight: 500;
         }
-        .btn-start { background: #22c55e; color: #052e16; }
-        .btn-start:hover { background: #16a34a; }
+        .btn-start { background: #00C4B3; color: #fff; }
+        .btn-start:hover { background: #00a89a; }
         .btn-stop { background: #ef4444; color: #fff; }
         .btn-stop:hover { background: #dc2626; }
-        .btn-primary { background: #3b82f6; color: #fff; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-secondary { background: #475569; color: #e2e8f0; }
-        .btn-secondary:hover { background: #64748b; }
+        .btn-primary { background: #FA582D; color: #fff; }
+        .btn-primary:hover { background: #e04a20; }
+        .btn-secondary { background: #e0e0e0; color: #1a1a2e; }
+        .btn-secondary:hover { background: #d0d0d0; }
         .btn-danger { background: #ef4444; color: #fff; }
 
         /* Log panel */
         .log-panel {
-            background: #020617; border: 1px solid #334155; border-radius: 4px;
+            background: #1a1a2e; border: 1px solid #e0e0e0; border-radius: 4px;
             padding: 8px; font-family: 'Monaco', 'Menlo', monospace;
             font-size: 11px; max-height: 300px; overflow-y: auto; line-height: 1.6;
         }
-        .log-entry { color: #94a3b8; white-space: pre-wrap; word-break: break-all; }
+        .log-entry { color: #b0b8c8; white-space: pre-wrap; word-break: break-all; }
         .log-entry.error { color: #ef4444; }
 
         /* Modal */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center;
         }
         .modal-overlay.show { display: flex; }
         .modal {
-            background: #1e293b; border: 1px solid #475569; border-radius: 8px;
+            background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;
             padding: 24px; width: 400px; max-width: 90vw;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
         }
-        .modal h3 { margin-bottom: 16px; color: #f97316; }
+        .modal h3 { margin-bottom: 16px; color: #FA582D; }
         .modal-field { margin-bottom: 12px; }
-        .modal-field label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; }
+        .modal-field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
         .modal-field input {
-            width: 100%; padding: 8px; background: #0f172a; border: 1px solid #475569;
-            border-radius: 4px; color: #e2e8f0; font-size: 13px;
+            width: 100%; padding: 8px; background: #f7f8fa; border: 1px solid #d0d0d0;
+            border-radius: 4px; color: #1a1a2e; font-size: 13px;
         }
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
@@ -551,22 +554,22 @@ async function renderClientTab(name) {
         '<div class="slider-group"><label>Bandwidth <span class="slider-value" id="c-' + name + '-bandwidth-val">0</span> Mbps (0=unlimited)</label>' +
         '<input type="range" id="c-' + name + '-bandwidth" min="0" max="100" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
         '</div>' +
-        '<div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px">' +
+        '<div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px">' +
         '<input type="checkbox" id="c-' + name + '-random-bw" onchange="clientToggleRandomBw(\'' + name + '\')">' +
         '<strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)' +
-        '<span id="c-' + name + '-random-bw-status" style="color:#94a3b8;margin-left:8px"></span>' +
+        '<span id="c-' + name + '-random-bw-status" style="color:#888;margin-left:8px"></span>' +
         '</label></div>' +
-        '<div style="margin-top:8px;padding:10px;background:#1e293b;border-radius:8px">' +
+        '<div style="margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
         '<input type="checkbox" id="c-' + name + '-source-ip-toggle" onchange="clientToggleSourceIp(\'' + name + '\')">' +
         '<strong>Random Source IPs</strong> (simulate multiple clients)</label>' +
         '<div id="c-' + name + '-source-ip-config" style="display:none;margin-top:8px">' +
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
         '<label style="font-size:12px">Base IP</label>' +
-        '<input type="text" id="c-' + name + '-source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">' +
+        '<input type="text" id="c-' + name + '-source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
         '<label style="font-size:12px">Count</label>' +
-        '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">' +
+        '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
         '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
         '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div></div>' +
         '<div class="shaping-actions">' +

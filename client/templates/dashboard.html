@@ -50,14 +50,14 @@
                     <input type="range" id="bandwidth" min="0" max="100" value="0" oninput="updateSlider('bandwidth')">
                 </div>
             </div>
-            <div style="margin-top:12px;padding:10px;background:#1e293b;border-radius:8px">
+            <div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <input type="checkbox" id="random-bw-toggle">
                     <strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)
-                    <span id="random-bw-status" style="color:#94a3b8;margin-left:8px"></span>
+                    <span id="random-bw-status" style="color:#888;margin-left:8px"></span>
                 </label>
             </div>
-            <div style="margin-top:8px;padding:10px;background:#1e293b;border-radius:8px">
+            <div style="margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <input type="checkbox" id="source-ip-toggle">
                     <strong>Random Source IPs</strong> (simulate multiple clients)
@@ -65,12 +65,12 @@
                 <div id="source-ip-config" style="display:none;margin-top:8px">
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                         <label style="font-size:12px">Base IP</label>
-                        <input type="text" id="source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">
+                        <input type="text" id="source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">
                         <label style="font-size:12px">Count</label>
-                        <input type="number" id="source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#0f172a;color:#e2e8f0;border:1px solid #334155;border-radius:4px">
+                        <input type="number" id="source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">
                         <button class="btn btn-primary" onclick="applySourceIps()" style="padding:4px 12px">Apply</button>
                     </div>
-                    <div id="source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div>
+                    <div id="source-ip-list" style="margin-top:8px;font-size:11px;color:#888"></div>
                 </div>
             </div>
             <div class="shaping-actions">
