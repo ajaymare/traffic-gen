@@ -89,6 +89,38 @@ const PROTOCOLS = {
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
+    ext_https: {
+        name: 'External HTTPS',
+        fields: [
+            { key: 'url', label: 'Target URL', type: 'text', default: 'https://www.google.com' },
+            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'HEAD'], default: 'GET' },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
+        ]
+    },
+    ext_tcp: {
+        name: 'External TCP',
+        fields: [
+            { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
+            { key: 'port', label: 'Target Port', type: 'number', default: 443 },
+            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
+        ]
+    },
+    ext_udp: {
+        name: 'External UDP',
+        fields: [
+            { key: 'host', label: 'Target Host', type: 'text', default: '1.1.1.1' },
+            { key: 'port', label: 'Target Port', type: 'number', default: 53 },
+            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 512 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'dns_mode', label: 'DNS Query Mode', type: 'checkbox', default: true },
+            { key: 'dns_domain', label: 'DNS Domain', type: 'text', default: 'example.com' },
+            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
+        ]
+    },
     icmp: {
         name: 'ICMP (Ping)',
         fields: [

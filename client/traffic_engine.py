@@ -468,6 +468,130 @@ class TrafficEngine:
 
         job.log("Stopped")
 
+    # ─── External HTTPS ────────────────────────────────────
+
+    def _run_ext_https(self, job: TrafficJob):
+        cfg = job.config
+        url = cfg.get('url', 'https://www.google.com')
+        method = cfg.get('method', 'GET').upper()
+        interval = float(cfg.get('interval', 1))
+        verify_ssl = not cfg.get('ignore_ssl', False)
+
+        job.log(f"External HTTPS {method} {url} interval={interval}s")
+
+        session = requests.Session()
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        })
+
+        while not job.should_stop():
+            try:
+                headers = {'X-Forwarded-For': _random_xff()}
+                if method == 'GET':
+                    resp = session.get(url, headers=headers, verify=verify_ssl, timeout=30)
+                else:
+                    resp = session.request(method, url, headers=headers, verify=verify_ssl, timeout=30)
+                job.stats['bytes_recv'] += len(resp.content)
+                job.stats['requests'] += 1
+                job.log(f"{method} {resp.status_code} — {len(resp.content)} bytes ({url})")
+            except Exception as e:
+                job.stats['errors'] += 1
+                job.log(f"Error: {e}")
+            time.sleep(interval)
+        job.log("Stopped")
+
+    # ─── External TCP ─────────────────────────────────────
+
+    def _run_ext_tcp(self, job: TrafficJob):
+        cfg = job.config
+        host = cfg.get('host', '1.1.1.1')
+        port = int(cfg.get('port', 443))
+        msg_size = int(cfg.get('msg_size', 1024))
+        interval = float(cfg.get('interval', 1))
+
+        job.log(f"External TCP {host}:{port} msg_size={msg_size}")
+
+        while not job.should_stop():
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(10)
+                sock.connect((host, port))
+                job.log(f"Connected to {host}:{port}")
+
+                while not job.should_stop():
+                    data = os.urandom(msg_size)
+                    sock.sendall(data)
+                    job.stats['bytes_sent'] += len(data)
+                    job.stats['requests'] += 1
+                    try:
+                        resp = sock.recv(65536)
+                        job.stats['bytes_recv'] += len(resp)
+                        if not resp:
+                            job.log("Connection closed by remote")
+                            break
+                    except socket.timeout:
+                        pass
+                    time.sleep(interval)
+
+                sock.close()
+            except Exception as e:
+                job.stats['errors'] += 1
+                job.log(f"TCP error: {e}")
+                time.sleep(2)
+        job.log("Stopped")
+
+    # ─── External UDP ─────────────────────────────────────
+
+    def _run_ext_udp(self, job: TrafficJob):
+        cfg = job.config
+        host = cfg.get('host', '1.1.1.1')
+        port = int(cfg.get('port', 53))
+        msg_size = int(cfg.get('msg_size', 512))
+        interval = float(cfg.get('interval', 1))
+        dns_mode = cfg.get('dns_mode', False)
+        dns_domain = cfg.get('dns_domain', 'example.com')
+
+        job.log(f"External UDP {host}:{port} msg_size={msg_size} dns_mode={dns_mode}")
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5)
+
+        while not job.should_stop():
+            try:
+                if dns_mode:
+                    # Build a simple DNS A query
+                    import struct
+                    txn_id = random.randint(0, 65535)
+                    flags = 0x0100  # standard query, recursion desired
+                    header = struct.pack('>HHHHHH', txn_id, flags, 1, 0, 0, 0)
+                    qname = b''
+                    for part in dns_domain.split('.'):
+                        qname += bytes([len(part)]) + part.encode()
+                    qname += b'\x00'
+                    question = qname + struct.pack('>HH', 1, 1)  # A record, IN class
+                    data = header + question
+                else:
+                    data = os.urandom(msg_size)
+
+                sock.sendto(data, (host, port))
+                job.stats['bytes_sent'] += len(data)
+                job.stats['requests'] += 1
+                try:
+                    resp, _ = sock.recvfrom(65536)
+                    job.stats['bytes_recv'] += len(resp)
+                    if dns_mode:
+                        job.log(f"DNS query {dns_domain} → {len(resp)} bytes response")
+                except socket.timeout:
+                    pass
+            except Exception as e:
+                job.stats['errors'] += 1
+                job.log(f"UDP error: {e}")
+            time.sleep(interval)
+
+        sock.close()
+        job.log("Stopped")
+
     # ─── ICMP ───────────────────────────────────────────────
 
     def _run_icmp(self, job: TrafficJob):
