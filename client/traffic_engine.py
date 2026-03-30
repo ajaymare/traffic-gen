@@ -450,12 +450,16 @@ class TrafficEngine:
                 client = paramiko.SSHClient()
                 client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                 client.connect(host, port=port, username=username,
-                               password=password, timeout=10)
-                stdin, stdout, stderr = client.exec_command(command)
+                               password=password, timeout=10,
+                               allow_agent=False, look_for_keys=False)
+                stdin, stdout, stderr = client.exec_command(command, timeout=10)
                 out = stdout.read().decode().strip()
+                err = stderr.read().decode().strip()
                 job.stats['requests'] += 1
                 job.stats['bytes_recv'] += len(out)
                 job.log(f"Output: {out[:200]}")
+                if err:
+                    job.log(f"Stderr: {err[:200]}")
                 client.close()
             except Exception as e:
                 job.stats['errors'] += 1
