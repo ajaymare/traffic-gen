@@ -7,6 +7,7 @@ services:
       - NET_ADMIN
     ports:
       - "8080:8080"
+      - "8443:8443"
     environment:
       - SERVER_HOST=${SERVER_HOST:-10.0.0.100}
     restart: unless-stopped

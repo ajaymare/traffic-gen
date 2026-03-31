@@ -10,6 +10,7 @@ services:
       - NET_ADMIN
     ports:
       - "8080:8080"
+      - "8443:8443"
     environment:
       - SERVER_HOST=server
     networks:
@@ -37,6 +38,7 @@ services:
       - "21100-21110:21100-21110"
       - "2222:2222"
       - "8082:8082"
+      - "18443:8443"
     networks:
       - traffic-net
     restart: unless-stopped

@@ -38,8 +38,8 @@ docker compose -f docker-compose.server.yml up -d
 SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 ```
 
-- Client dashboard: `http://<client-vm-ip>:8080`
-- Server dashboard: `http://<server-vm-ip>:8082`
+- Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
+- Server dashboard: `https://<server-vm-ip>:8443` (or `http://<server-vm-ip>:8082`)
 
 ## Features
 
@@ -111,7 +111,8 @@ Each protocol logs detailed per-request information:
 | 21 | FTP |
 | 21100–21110 | FTP passive |
 | 2222 | SSH (testuser/testpass) |
-| 8082 | Server Dashboard |
+| 8082 | Server Dashboard (HTTP) |
+| 8443 | Dashboard HTTPS (self-signed cert) |
 
 ## Default Credentials
 
@@ -134,6 +135,7 @@ docker run -d --name traffic-server \
   -p 21:21 -p 21100-21110:21100-21110 \
   -p 2222:2222 \
   -p 8082:8082 \
+  -p 8443:8443 \
   --restart unless-stopped \
   ajaymare/traffic-gen-server:latest
 ```
@@ -144,13 +146,14 @@ docker run -d --name traffic-server \
 docker run -d --name traffic-client \
   --cap-add NET_ADMIN \
   -p 8080:8080 \
+  -p 8443:8443 \
   -e SERVER_HOST=<server-vm-ip> \
   --restart unless-stopped \
   ajaymare/traffic-gen-client:latest
 ```
 
-- Client dashboard: `http://<client-vm-ip>:8080`
-- Server dashboard: `http://<server-vm-ip>:8082`
+- Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
+- Server dashboard: `https://<server-vm-ip>:8443` (or `http://<server-vm-ip>:8082`)
 
 ### Stop and Remove
 
