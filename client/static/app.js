@@ -3,24 +3,6 @@ const SRV = (typeof SERVER_HOST !== 'undefined') ? SERVER_HOST : 'server';
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
 
 const PROTOCOLS = {
-    http: {
-        name: 'HTTP',
-        fields: [
-            { key: 'url', label: 'URL', type: 'text', get default() { return `http://${SRV}/generate/100`; } },
-            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
-            { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-            { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
-            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
-            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
-            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
-            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
-            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
-            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
-            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-        ]
-    },
     https: {
         name: 'HTTPS',
         fields: [
@@ -28,25 +10,7 @@ const PROTOCOLS = {
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
             { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-            { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
-            { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
-            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
-            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
-            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
-            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
-            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
-            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
-            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-        ]
-    },
-    http2: {
-        name: 'HTTP/2',
-        fields: [
-            { key: 'url', label: 'URL', type: 'text', get default() { return `https://${SRV}/`; } },
-            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
-            { key: 'data_size_kb', label: 'Data KB', type: 'number', default: 0 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'http2', label: 'HTTP/2', type: 'checkbox', default: false },
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
@@ -171,14 +135,18 @@ const PROTOCOLS = {
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
-    icmp: {
-        name: 'ICMP (Ping)',
+    hping3: {
+        name: 'hping3',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
-            { key: 'packet_size', label: 'Pkt Size', type: 'number', default: 64 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.5 },
+            { key: 'mode', label: 'Mode', type: 'select', options: ['ICMP', 'TCP SYN', 'TCP ACK', 'TCP FIN', 'UDP', 'Traceroute'], default: 'ICMP' },
+            { key: 'port', label: 'Dest Port', type: 'number', default: 0 },
+            { key: 'packet_size', label: 'Data Size (B)', type: 'number', default: 64 },
+            { key: 'count', label: 'Count (0=cont)', type: 'number', default: 0 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'flood', label: 'Flood Mode', type: 'checkbox', default: false },
+            { key: 'ttl', label: 'TTL', type: 'number', default: 64 },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
-            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
             { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
             { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
