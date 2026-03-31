@@ -24,17 +24,28 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 
 ## Deployment
 
-### Server VM
+### Same Server (Recommended)
+
+Run both containers on a single machine using the combined compose file:
 
 ```bash
-# Copy the server/ directory and docker-compose.server.yml
+docker compose up -d
+```
+
+- Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
+- Server dashboard: `https://<server-ip>:18443` (or `http://<server-ip>:8082`)
+
+### Separate VMs
+
+**Server VM:**
+
+```bash
 docker compose -f docker-compose.server.yml up -d
 ```
 
-### Client VM
+**Client VM:**
 
 ```bash
-# Copy the client/ directory and docker-compose.client.yml
 SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 ```
 
@@ -123,6 +134,43 @@ Each protocol logs detailed per-request information:
 
 Images (amd64) are available on Docker Hub.
 
+### Same Server
+
+```bash
+# Create a docker network
+docker network create traffic-net
+
+# Start server
+docker run -d --name traffic-server \
+  --network traffic-net \
+  -p 80:80 -p 443:443 \
+  -p 5201:5201 -p 5201:5201/udp \
+  -p 5202:5202 -p 5202:5202/udp \
+  -p 5203:5203 -p 5203:5203/udp \
+  -p 9999:9999 -p 9998:9998/udp \
+  -p 21:21 -p 21100-21110:21100-21110 \
+  -p 2222:2222 \
+  -p 8082:8082 \
+  -p 18443:8443 \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-server:latest
+
+# Start client (points to server container by name)
+docker run -d --name traffic-client \
+  --network traffic-net \
+  --cap-add NET_ADMIN \
+  -p 8080:8080 \
+  -p 8443:8443 \
+  -e SERVER_HOST=traffic-server \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-client:latest
+```
+
+- Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
+- Server dashboard: `https://<server-ip>:18443` (or `http://<server-ip>:8082`)
+
+### Separate VMs
+
 **Server VM:**
 
 ```bash
@@ -160,6 +208,7 @@ docker run -d --name traffic-client \
 ```bash
 docker stop traffic-client traffic-server
 docker rm traffic-client traffic-server
+docker network rm traffic-net  # if using same-server setup
 ```
 
 ## Server Dashboard — Multi-Client Control
