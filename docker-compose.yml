@@ -25,7 +25,7 @@ services:
     container_name: traffic-server
     ports:
       - "8081:80"
-      - "8443:443"
+      - "8444:443"
       - "5201:5201"
       - "5201:5201/udp"
       - "5202:5202"
