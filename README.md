@@ -24,18 +24,7 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 
 ## Deployment
 
-### Same Server (Recommended)
-
-Run both containers on a single machine using the combined compose file:
-
-```bash
-docker compose up -d
-```
-
-- Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
-- Server dashboard: `https://<server-ip>:18443` (or `http://<server-ip>:8082`)
-
-### Separate VMs
+### Separate VMs (Recommended)
 
 **Server VM:**
 
@@ -51,6 +40,17 @@ SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 
 - Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
 - Server dashboard: `https://<server-vm-ip>:8443` (or `http://<server-vm-ip>:8082`)
+
+### Same Server
+
+Run both containers on a single machine for local testing:
+
+```bash
+docker compose up -d
+```
+
+- Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
+- Server dashboard: `https://<server-ip>:18443` (or `http://<server-ip>:8082`)
 
 ## Features
 
@@ -134,6 +134,40 @@ Each protocol logs detailed per-request information:
 
 Images (amd64) are available on Docker Hub.
 
+### Separate VMs (Recommended)
+
+**Server VM:**
+
+```bash
+docker run -d --name traffic-server \
+  -p 80:80 -p 443:443 \
+  -p 5201:5201 -p 5201:5201/udp \
+  -p 5202:5202 -p 5202:5202/udp \
+  -p 5203:5203 -p 5203:5203/udp \
+  -p 9999:9999 -p 9998:9998/udp \
+  -p 21:21 -p 21100-21110:21100-21110 \
+  -p 2222:2222 \
+  -p 8082:8082 \
+  -p 8443:8443 \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-server:latest
+```
+
+**Client VM:**
+
+```bash
+docker run -d --name traffic-client \
+  --cap-add NET_ADMIN \
+  -p 8080:8080 \
+  -p 8443:8443 \
+  -e SERVER_HOST=<server-vm-ip> \
+  --restart unless-stopped \
+  ajaymare/traffic-gen-client:latest
+```
+
+- Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
+- Server dashboard: `https://<server-vm-ip>:8443` (or `http://<server-vm-ip>:8082`)
+
 ### Same Server
 
 ```bash
@@ -168,40 +202,6 @@ docker run -d --name traffic-client \
 
 - Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
 - Server dashboard: `https://<server-ip>:18443` (or `http://<server-ip>:8082`)
-
-### Separate VMs
-
-**Server VM:**
-
-```bash
-docker run -d --name traffic-server \
-  -p 80:80 -p 443:443 \
-  -p 5201:5201 -p 5201:5201/udp \
-  -p 5202:5202 -p 5202:5202/udp \
-  -p 5203:5203 -p 5203:5203/udp \
-  -p 9999:9999 -p 9998:9998/udp \
-  -p 21:21 -p 21100-21110:21100-21110 \
-  -p 2222:2222 \
-  -p 8082:8082 \
-  -p 8443:8443 \
-  --restart unless-stopped \
-  ajaymare/traffic-gen-server:latest
-```
-
-**Client VM:**
-
-```bash
-docker run -d --name traffic-client \
-  --cap-add NET_ADMIN \
-  -p 8080:8080 \
-  -p 8443:8443 \
-  -e SERVER_HOST=<server-vm-ip> \
-  --restart unless-stopped \
-  ajaymare/traffic-gen-client:latest
-```
-
-- Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
-- Server dashboard: `https://<server-vm-ip>:8443` (or `http://<server-vm-ip>:8082`)
 
 ### Stop and Remove
 
