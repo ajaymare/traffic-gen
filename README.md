@@ -7,13 +7,13 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 | Protocol | Description |
 |----------|-------------|
 | HTTPS | GET/POST with optional HTTP/2, SSL bypass, upload mode |
-| TCP | Echo client with configurable message size |
-| UDP | Echo client with configurable message size |
 | iperf3 TCP | Bandwidth testing with parallel streams, reverse mode |
 | iperf3 UDP | Bandwidth testing with parallel streams, reverse mode |
+| hping3 | ICMP, TCP SYN/ACK/FIN, UDP, Traceroute with flood mode |
+| TCP | Echo client with configurable message size |
+| UDP | Echo client with configurable message size |
 | FTP | Continuous file download with progress logging |
 | SSH | Repeated command execution over SSH |
-| hping3 | ICMP, TCP SYN/ACK/FIN, UDP, Traceroute with flood mode |
 | External HTTPS | Multi-URL round-robin to external sites (Google, Cloudflare, etc.) |
 
 ## Architecture
@@ -91,12 +91,12 @@ Each protocol logs detailed per-request information:
 |----------|-------------|
 | HTTPS | `GET https://server/ → 200 \| sent=0B recv=104857600B` |
 | HTTPS (HTTP/2) | `GET https://server/ → 200 (HTTP/2) \| sent=0B recv=1234B` |
+| iperf3 | `iperf3 :5201 \| [5] 0.00-1.00 sec 11.8 MBytes 98.9 Mbits/sec` |
+| hping3 | `hping3 server → len=46 ip=10.0.0.2 ttl=64 rtt=0.5 ms` |
 | TCP | `TCP server:9999 → sent=1024B recv=1024B` |
 | UDP | `UDP server:9998 → sent=1024B recv=1024B` |
-| iperf3 | `iperf3 :5201 \| [5] 0.00-1.00 sec 11.8 MBytes 98.9 Mbits/sec` |
 | FTP | `FTP testfile_1gb.bin ← recv=52428800B (5%)` |
 | SSH | `SSH testuser@server $ uptime → exit=0 \| recv=42B \| 14:23 up 3 days` |
-| hping3 | `hping3 server → len=46 ip=10.0.0.2 ttl=64 rtt=0.5 ms` |
 | Ext HTTPS | `GET https://www.google.com → 200 \| sent=0B recv=14523B` |
 
 ## Server Ports
