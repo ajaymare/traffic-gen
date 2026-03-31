@@ -6,14 +6,14 @@ Docker-based network traffic generation and testing tool with a web UI. Supports
 
 | Protocol | Description |
 |----------|-------------|
-| HTTP | GET/POST with configurable data size, upload mode |
-| HTTPS | Same as HTTP with optional SSL verification skip |
-| HTTP/2 | True HTTP/2 traffic using httpx with h2 |
-| TCP | Echo client or iperf3 bandwidth test |
-| UDP | Echo client or iperf3 bandwidth test |
+| HTTPS | GET/POST with optional HTTP/2, SSL bypass, upload mode |
+| TCP | Echo client with configurable message size |
+| UDP | Echo client with configurable message size |
+| iperf3 TCP | Bandwidth testing with parallel streams, reverse mode |
+| iperf3 UDP | Bandwidth testing with parallel streams, reverse mode |
 | FTP | Continuous file download with progress logging |
 | SSH | Repeated command execution over SSH |
-| ICMP | Ping with configurable packet size |
+| hping3 | ICMP, TCP SYN/ACK/FIN, UDP, Traceroute with flood mode |
 | External HTTPS | Multi-URL round-robin to external sites (Google, Cloudflare, etc.) |
 
 ## Architecture
@@ -49,7 +49,8 @@ SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 - **Burst mode**: Send N requests rapidly, pause for X seconds, repeat (configurable burst size and pause)
 - **Multiple flows**: Run up to 20 parallel flows per protocol
 - **DSCP marking**: Set QoS markings (EF, AF, CS classes) on all protocols
-- **Random data sizes**: Toggle random packet/file sizes for HTTP, HTTPS, TCP, UDP, FTP
+- **Auto-refresh toggle**: Enable/disable live dashboard polling
+- **Random data sizes**: Toggle random packet/file sizes for HTTPS, TCP, UDP, FTP
 - **Select all / bulk actions**: Start or stop multiple protocols at once
 
 ### Network Impairment
@@ -74,11 +75,12 @@ SERVER_HOST=<server-vm-ip> docker compose -f docker-compose.client.yml up -d
 - **Docker healthchecks**: Both containers report health status via `docker ps`
 
 ### Protocol-Specific
-- **HTTP/2 support**: True HTTP/2 traffic generation using httpx with h2
-- **iperf3 bandwidth testing**: TCP/UDP with configurable bandwidth, parallel streams, reverse mode; 3 server instances (ports 5201–5203) for concurrent clients with auto-port selection
+- **HTTPS with HTTP/2**: Toggle HTTP/2 checkbox for true HTTP/2 traffic using httpx with h2, or use standard HTTPS/1.1
+- **iperf3 bandwidth testing**: Dedicated TCP/UDP cards with port 5201 default; configurable bandwidth, parallel streams, reverse mode; 3 server instances (ports 5201–5203) for concurrent clients with auto-port selection
+- **hping3**: Advanced packet crafting — ICMP ping, TCP SYN/ACK/FIN scans, UDP probes, traceroute with flood mode, custom TTL, data size, and DSCP
 - **FTP file management**: Upload custom files to the server via dashboard, download with 1MB progress logging
 - **HTTPS SSL bypass**: Toggle to ignore SSL certificate validation
-- **HTTP upload/download**: Stream up to 1GB data via `/generate/<size_mb>` endpoint
+- **HTTPS upload/download**: Stream up to 1GB data via `/generate/<size_mb>` endpoint
 - **Multi-client control**: Server dashboard (port 8082) with tabs to manage multiple clients
 
 ## Activity Log Examples
@@ -87,21 +89,21 @@ Each protocol logs detailed per-request information:
 
 | Protocol | Example Log |
 |----------|-------------|
-| HTTP/HTTPS | `GET http://server/generate/100 → 200 \| sent=0B recv=104857600B` |
-| HTTP/2 | `GET https://server/ → 200 (HTTP/2) \| sent=0B recv=1234B` |
+| HTTPS | `GET https://server/ → 200 \| sent=0B recv=104857600B` |
+| HTTPS (HTTP/2) | `GET https://server/ → 200 (HTTP/2) \| sent=0B recv=1234B` |
 | TCP | `TCP server:9999 → sent=1024B recv=1024B` |
 | UDP | `UDP server:9998 → sent=1024B recv=1024B` |
+| iperf3 | `iperf3 :5201 \| [5] 0.00-1.00 sec 11.8 MBytes 98.9 Mbits/sec` |
 | FTP | `FTP testfile_1gb.bin ← recv=52428800B (5%)` |
 | SSH | `SSH testuser@server $ uptime → exit=0 \| recv=42B \| 14:23 up 3 days` |
-| iperf3 | `iperf3 :5201 \| [5] 0.00-1.00 sec 11.8 MBytes 98.9 Mbits/sec` |
-| ICMP | `ICMP server → 64 bytes from server: icmp_seq=1 ttl=64 time=0.5 ms` |
+| hping3 | `hping3 server → len=46 ip=10.0.0.2 ttl=64 rtt=0.5 ms` |
 | Ext HTTPS | `GET https://www.google.com → 200 \| sent=0B recv=14523B` |
 
 ## Server Ports
 
 | Port | Service |
 |------|---------|
-| 80 | HTTP |
+| 80 | HTTP (nginx) |
 | 443 | HTTPS (self-signed cert, HTTP/2 enabled) |
 | 5201–5203 | iperf3 (3 instances for concurrent clients) |
 | 9999 | TCP echo |
