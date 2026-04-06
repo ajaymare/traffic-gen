@@ -64,10 +64,11 @@ docker compose up -d
 - **Random data sizes**: Toggle random packet/file sizes for HTTPS, TCP, UDP, FTP
 - **Select all / bulk actions**: Start or stop multiple protocols at once
 
-### Network Impairment
-- **Latency**: 0–500ms with jitter (0–200ms, normal distribution)
-- **Packet loss**: 0–50%
-- **Bandwidth limit**: 0–1000 Mbps
+### Link Simulation
+- **Presets**: Link Down (100% loss), Degraded WAN (300ms/5%), Voice SLA (200ms/2%), Video SLA (150ms/3%), Custom
+- **Custom impairment**: Configurable latency, jitter, packet loss, and bandwidth limit
+- **Per-protocol targeting**: Apply impairment to all traffic or selected protocols (HTTPS, iperf3, FTP, SSH, TCP, UDP, custom ports)
+- **Cycle mode**: Alternate between healthy and impaired states on a configurable timer — tests SD-WAN failover and failback
 - **Random bandwidth**: Cycles bandwidth limit randomly between 20 Mbps and 1 Gbps every 10 seconds
 
 ### Source IP Simulation

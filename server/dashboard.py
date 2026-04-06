@@ -576,24 +576,63 @@ async function renderClientTab(name) {
         '<div class="stat-box"><div class="stat-label">Requests</div><div class="stat-value client-val" id="c-' + name + '-reqs">0</div></div>' +
         '<div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value client-val" id="c-' + name + '-errors">0</div></div>' +
         '</div></div></div>' +
-        // Shaping
-        '<div class="card"><div class="card-header">Network Impairment (tc/netem)</div><div class="card-body">' +
-        '<div class="shaping-grid">' +
-        '<div class="slider-group"><label>Latency <span class="slider-value" id="c-' + name + '-latency-val">0</span> ms</label>' +
-        '<input type="range" id="c-' + name + '-latency" min="0" max="500" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'latency\')"></div>' +
-        '<div class="slider-group"><label>Jitter <span class="slider-value" id="c-' + name + '-jitter-val">0</span> ms</label>' +
-        '<input type="range" id="c-' + name + '-jitter" min="0" max="200" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'jitter\')"></div>' +
-        '<div class="slider-group"><label>Packet Loss <span class="slider-value" id="c-' + name + '-loss-val">0</span> %</label>' +
-        '<input type="range" id="c-' + name + '-loss" min="0" max="50" value="0" step="0.5" oninput="clientUpdateSlider(\'' + name + '\',\'loss\')"></div>' +
-        '<div class="slider-group"><label>Bandwidth <span class="slider-value" id="c-' + name + '-bandwidth-val">0</span> Mbps (0=unlimited)</label>' +
-        '<input type="range" id="c-' + name + '-bandwidth" min="0" max="1000" step="10" value="0" oninput="clientUpdateSlider(\'' + name + '\',\'bandwidth\')"></div>' +
+        // Link Simulation
+        '<div class="card"><div class="card-header">Link Simulation</div><div class="card-body">' +
+        // Target
+        '<div style="margin-bottom:12px">' +
+        '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:16px"><input type="radio" name="c-' + name + '-link-target" value="all" checked onchange="clientToggleLinkTarget(\'' + name + '\')"> All Traffic</label>' +
+        '<label style="display:inline-flex;align-items:center;gap:4px"><input type="radio" name="c-' + name + '-link-target" value="selected" onchange="clientToggleLinkTarget(\'' + name + '\')"> Selected Protocols</label>' +
+        '<div id="c-' + name + '-link-ports-config" style="display:none;margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="443" data-proto="tcp"> HTTPS (443)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="5201" data-proto="tcp"> iperf3 (5201)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="21" data-proto="tcp"> FTP (21)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="2222" data-proto="tcp"> SSH (2222)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9999" data-proto="tcp"> TCP (9999)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9998" data-proto="udp"> UDP (9998)</label>' +
+        '</div></div></div>' +
+        // Presets
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Presets</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'link_down\')" style="padding:4px 12px;font-size:12px">Link Down</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'degraded_wan\')" style="padding:4px 12px;font-size:12px">Degraded WAN</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'voice_sla\')" style="padding:4px 12px;font-size:12px">Voice SLA</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'video_sla\')" style="padding:4px 12px;font-size:12px">Video SLA</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'custom\')" style="padding:4px 12px;font-size:12px">Custom</button>' +
+        '</div></div>' +
+        // Impaired State Values
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Impaired State</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+        '<label style="font-size:12px">Latency</label><input type="number" id="c-' + name + '-link-latency" value="0" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
+        '<label style="font-size:12px;margin-left:8px">Jitter</label><input type="number" id="c-' + name + '-link-jitter" value="0" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
+        '<label style="font-size:12px;margin-left:8px">Packet Loss</label><input type="number" id="c-' + name + '-link-loss" value="0" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>' +
+        '<label style="font-size:12px;margin-left:8px">Bandwidth</label><input type="number" id="c-' + name + '-link-bw" value="0" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps (0=unlimited)</span>' +
+        '</div></div>' +
+        // Cycle Mode
+        '<div style="margin-bottom:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
+        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="c-' + name + '-link-cycle-toggle" onchange="document.getElementById(\'c-' + name + '-link-cycle-config\').style.display=this.checked?\'block\':\'none\'"> <strong>Cycle Mode</strong> (alternate healthy/impaired)</label>' +
+        '<div id="c-' + name + '-link-cycle-config" style="display:none;margin-top:8px">' +
+        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
+        '<label style="font-size:12px">Healthy</label><input type="number" id="c-' + name + '-link-healthy-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
+        '<label style="font-size:12px;margin-left:8px">Impaired</label><input type="number" id="c-' + name + '-link-impaired-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
+        '</div></div></div>' +
+        // Status
+        '<div id="c-' + name + '-link-sim-status" style="margin-bottom:12px;padding:8px 12px;background:#f0f2f5;border-radius:8px;font-size:13px;display:none">' +
+        'Status: <span id="c-' + name + '-link-sim-phase" style="font-weight:600">idle</span>' +
+        '<span id="c-' + name + '-link-sim-countdown" style="margin-left:8px;color:#888"></span></div>' +
+        // Actions
+        '<div class="shaping-actions">' +
+        '<button class="btn btn-start" onclick="clientStartLinkSim(\'' + name + '\')">Start</button>' +
+        '<button class="btn btn-stop" onclick="clientStopLinkSim(\'' + name + '\')">Stop</button>' +
         '</div>' +
+        // Random Bandwidth
         '<div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px">' +
         '<input type="checkbox" id="c-' + name + '-random-bw" onchange="clientToggleRandomBw(\'' + name + '\')">' +
         '<strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)' +
         '<span id="c-' + name + '-random-bw-status" style="color:#888;margin-left:8px"></span>' +
         '</label></div>' +
+        // Source IPs
         '<div style="margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
         '<input type="checkbox" id="c-' + name + '-source-ip-toggle" onchange="clientToggleSourceIp(\'' + name + '\')">' +
@@ -606,10 +645,7 @@ async function renderClientTab(name) {
         '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
         '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
         '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div></div>' +
-        '<div class="shaping-actions">' +
-        '<button class="btn btn-primary" onclick="clientApplyShaping(\'' + name + '\')">Apply Shaping</button>' +
-        '<button class="btn btn-secondary" onclick="clientClearShaping(\'' + name + '\')">Clear All</button>' +
-        '</div></div></div>' +
+        '</div></div>' +
         // Protocol cards
         '<div class="card"><div class="card-header"><span>Traffic Generators</span>' +
         '<div class="bulk-actions">' +
@@ -705,49 +741,100 @@ async function clientStopSelected(clientName) {
     }
 }
 
-function clientUpdateSlider(clientName, id) {
-    const el = document.getElementById('c-' + clientName + '-' + id);
-    const val = document.getElementById('c-' + clientName + '-' + id + '-val');
-    if (el && val) val.textContent = el.value;
+const LINK_PRESETS = {
+    link_down: { latency_ms: 0, jitter_ms: 0, packet_loss_pct: 100, bandwidth_mbps: 0 },
+    degraded_wan: { latency_ms: 300, jitter_ms: 50, packet_loss_pct: 5, bandwidth_mbps: 0 },
+    voice_sla: { latency_ms: 200, jitter_ms: 40, packet_loss_pct: 2, bandwidth_mbps: 0 },
+    video_sla: { latency_ms: 150, jitter_ms: 30, packet_loss_pct: 3, bandwidth_mbps: 0 },
+};
+
+function clientApplyPreset(clientName, name) {
+    const p = LINK_PRESETS[name];
+    if (p) {
+        document.getElementById('c-' + clientName + '-link-latency').value = p.latency_ms;
+        document.getElementById('c-' + clientName + '-link-jitter').value = p.jitter_ms;
+        document.getElementById('c-' + clientName + '-link-loss').value = p.packet_loss_pct;
+        document.getElementById('c-' + clientName + '-link-bw').value = p.bandwidth_mbps;
+    }
 }
 
-async function clientApplyShaping(clientName) {
-    const body = {
-        latency_ms: parseInt(document.getElementById('c-' + clientName + '-latency').value),
-        jitter_ms: parseInt(document.getElementById('c-' + clientName + '-jitter').value),
-        packet_loss_pct: parseFloat(document.getElementById('c-' + clientName + '-loss').value),
-        bandwidth_mbps: parseInt(document.getElementById('c-' + clientName + '-bandwidth').value),
-    };
-    const res = await apiPost('/api/client/' + clientName + '/shaping', body);
-    addClientLog(clientName, '[SHAPING] ' + (res.message || ''));
+function clientToggleLinkTarget(clientName) {
+    const sel = document.querySelector('input[name="c-' + clientName + '-link-target"]:checked').value;
+    document.getElementById('c-' + clientName + '-link-ports-config').style.display = sel === 'selected' ? 'block' : 'none';
 }
 
-async function clientClearShaping(clientName) {
-    await apiPost('/api/client/' + clientName + '/shaping/clear', {});
-    ['latency','jitter','loss','bandwidth'].forEach(id => {
-        const el = document.getElementById('c-' + clientName + '-' + id);
-        if (el) { el.value = 0; clientUpdateSlider(clientName, id); }
+function clientGetSelectedPorts(clientName) {
+    const ports = [];
+    document.querySelectorAll('.c-' + clientName + '-link-port-cb:checked').forEach(cb => {
+        ports.push({ port: parseInt(cb.dataset.port), protocol: cb.dataset.proto });
     });
-    addClientLog(clientName, '[SHAPING] Cleared');
+    return ports;
 }
 
-async function clientLoadShaping(clientName) {
+async function clientStartLinkSim(clientName) {
+    const target = document.querySelector('input[name="c-' + clientName + '-link-target"]:checked').value;
+    const body = {
+        preset: 'custom',
+        latency_ms: parseInt(document.getElementById('c-' + clientName + '-link-latency').value) || 0,
+        jitter_ms: parseInt(document.getElementById('c-' + clientName + '-link-jitter').value) || 0,
+        packet_loss_pct: parseFloat(document.getElementById('c-' + clientName + '-link-loss').value) || 0,
+        bandwidth_mbps: parseInt(document.getElementById('c-' + clientName + '-link-bw').value) || 0,
+        target: target,
+        ports: target === 'selected' ? clientGetSelectedPorts(clientName) : [],
+        cycle_mode: document.getElementById('c-' + clientName + '-link-cycle-toggle').checked,
+        healthy_duration: parseInt(document.getElementById('c-' + clientName + '-link-healthy-dur').value) || 30,
+        impaired_duration: parseInt(document.getElementById('c-' + clientName + '-link-impaired-dur').value) || 30,
+    };
+    const res = await apiPost('/api/client/' + clientName + '/link-simulation/start', body);
+    addClientLog(clientName, '[LINK SIM] ' + (res.message || ''));
+}
+
+async function clientStopLinkSim(clientName) {
+    const res = await apiPost('/api/client/' + clientName + '/link-simulation/stop', {});
+    addClientLog(clientName, '[LINK SIM] ' + (res.message || ''));
+}
+
+async function clientPollLinkSimStatus(clientName) {
     try {
-        const resp = await fetch('/api/client/' + clientName + '/shaping/current');
+        const resp = await fetch('/api/client/' + clientName + '/link-simulation/status');
         const data = await resp.json();
-        if (data.latency_ms !== undefined) {
-            document.getElementById('c-' + clientName + '-latency').value = data.latency_ms;
-            document.getElementById('c-' + clientName + '-jitter').value = data.jitter_ms;
-            document.getElementById('c-' + clientName + '-loss').value = data.packet_loss_pct;
-            document.getElementById('c-' + clientName + '-bandwidth').value = data.bandwidth_mbps;
-            ['latency','jitter','loss','bandwidth'].forEach(id => clientUpdateSlider(clientName, id));
+        const statusEl = document.getElementById('c-' + clientName + '-link-sim-status');
+        const phaseEl = document.getElementById('c-' + clientName + '-link-sim-phase');
+        const countdownEl = document.getElementById('c-' + clientName + '-link-sim-countdown');
+        if (!statusEl) return;
+        if (data.active) {
+            statusEl.style.display = 'block';
+            const phase = data.phase || 'idle';
+            phaseEl.textContent = phase.toUpperCase();
+            phaseEl.style.color = phase === 'impaired' ? '#e74c3c' : phase === 'healthy' ? '#27ae60' : '#888';
+            if (data.cycle_mode && data.phase_remaining > 0) {
+                const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
+                countdownEl.textContent = '(Next: ' + next + ' in ' + data.phase_remaining + 's)';
+            } else {
+                countdownEl.textContent = '';
+            }
+        } else {
+            statusEl.style.display = 'none';
         }
-        if (data.random_bandwidth) {
-            const el = document.getElementById('c-' + clientName + '-random-bw');
-            if (el) el.checked = true;
-            const st = document.getElementById('c-' + clientName + '-random-bw-status');
-            if (st) st.textContent = 'Active';
+    } catch(e) {}
+}
+
+async function clientLoadLinkSimStatus(clientName) {
+    try {
+        const resp = await fetch('/api/client/' + clientName + '/link-simulation/status');
+        const data = await resp.json();
+        if (data.active && data.config) {
+            const c = data.config;
+            document.getElementById('c-' + clientName + '-link-latency').value = c.latency_ms || 0;
+            document.getElementById('c-' + clientName + '-link-jitter').value = c.jitter_ms || 0;
+            document.getElementById('c-' + clientName + '-link-loss').value = c.packet_loss_pct || 0;
+            document.getElementById('c-' + clientName + '-link-bw').value = c.bandwidth_mbps || 0;
+            if (c.cycle_mode) {
+                document.getElementById('c-' + clientName + '-link-cycle-toggle').checked = true;
+                document.getElementById('c-' + clientName + '-link-cycle-config').style.display = 'block';
+            }
         }
+        clientPollLinkSimStatus(clientName);
     } catch(e) {}
 }
 
@@ -989,6 +1076,7 @@ async function pollAll() {
         loadFtpFiles();
     } else if (clientList[activeTab]) {
         await pollClientStatus(activeTab);
+        clientPollLinkSimStatus(activeTab);
     }
 }
 
@@ -1008,7 +1096,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadShaping(name); clientLoadSourceIps(name);
+        clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
         switchTab(name);
     }
 }
@@ -1031,7 +1119,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadShaping(name); clientLoadSourceIps(name);
+            clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1258,21 +1346,21 @@ def client_stop(name):
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/shaping', methods=['POST'])
-def client_shaping(name):
-    result, code = proxy_to_client(name, '/api/shaping', 'POST', request.json or {})
+@app.route('/api/client/<name>/link-simulation/start', methods=['POST'])
+def client_link_sim_start(name):
+    result, code = proxy_to_client(name, '/api/link-simulation/start', 'POST', request.json or {})
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/shaping/clear', methods=['POST'])
-def client_shaping_clear(name):
-    result, code = proxy_to_client(name, '/api/shaping/clear', 'POST', {})
+@app.route('/api/client/<name>/link-simulation/stop', methods=['POST'])
+def client_link_sim_stop(name):
+    result, code = proxy_to_client(name, '/api/link-simulation/stop', 'POST', {})
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/shaping/current')
-def client_shaping_current(name):
-    result, code = proxy_to_client(name, '/api/shaping/current')
+@app.route('/api/client/<name>/link-simulation/status')
+def client_link_sim_status(name):
+    result, code = proxy_to_client(name, '/api/link-simulation/status')
     return jsonify(result), code
 
 

@@ -62,31 +62,37 @@ def stop_traffic():
     return jsonify({"ok": ok, "message": msg}), 200 if ok else 404
 
 
-@app.route('/api/shaping', methods=['POST'])
-def apply_shaping():
+@app.route('/api/link-simulation/start', methods=['POST'])
+def start_link_sim():
     d = _get_json()
     try:
-        latency = int(d.get('latency_ms', 0))
-        jitter = int(d.get('jitter_ms', 0))
-        loss = float(d.get('packet_loss_pct', 0))
-        bw = int(d.get('bandwidth_mbps', 0))
+        config = {
+            'preset': d.get('preset', 'custom'),
+            'latency_ms': int(d.get('latency_ms', 0)),
+            'jitter_ms': int(d.get('jitter_ms', 0)),
+            'packet_loss_pct': float(d.get('packet_loss_pct', 0)),
+            'bandwidth_mbps': int(d.get('bandwidth_mbps', 0)),
+            'target': d.get('target', 'all'),
+            'ports': d.get('ports', []),
+            'cycle_mode': bool(d.get('cycle_mode', False)),
+            'healthy_duration': int(d.get('healthy_duration', 30)),
+            'impaired_duration': int(d.get('impaired_duration', 30)),
+        }
     except (ValueError, TypeError):
-        return jsonify({"error": "Invalid shaping parameters"}), 400
-    network_shaper.apply_shaping(latency, jitter, loss, bw)
-    return jsonify({"ok": True, "message": "Shaping applied",
-                    "settings": network_shaper.get_last_shaping()})
+        return jsonify({"error": "Invalid parameters"}), 400
+    network_shaper.start_link_simulation(config)
+    return jsonify({"ok": True, "message": "Link simulation started"})
 
 
-@app.route('/api/shaping/clear', methods=['POST'])
-def clear_shaping():
-    network_shaper.clear_all()
-    return jsonify({"ok": True, "message": "Shaping cleared"})
+@app.route('/api/link-simulation/stop', methods=['POST'])
+def stop_link_sim():
+    network_shaper.stop_link_simulation()
+    return jsonify({"ok": True, "message": "Link simulation stopped"})
 
 
-@app.route('/api/shaping/current')
-def get_shaping():
-    return jsonify({**network_shaper.get_last_shaping(),
-                    "random_bandwidth": network_shaper.is_random_bandwidth_running()})
+@app.route('/api/link-simulation/status')
+def link_sim_status():
+    return jsonify(network_shaper.get_link_simulation_status())
 
 
 @app.route('/api/shaping/random_bandwidth', methods=['POST'])

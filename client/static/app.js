@@ -291,30 +291,95 @@ async function stopSelected() {
     }
 }
 
-// ─── Shaping ───────────────────────────────────────────────
+// ─── Link Simulation ────────────────────────────────────────
 
-function updateSlider(id) {
-    document.getElementById(id + '-val').textContent = document.getElementById(id).value;
+const LINK_PRESETS = {
+    link_down: { latency_ms: 0, jitter_ms: 0, packet_loss_pct: 100, bandwidth_mbps: 0 },
+    degraded_wan: { latency_ms: 300, jitter_ms: 50, packet_loss_pct: 5, bandwidth_mbps: 0 },
+    voice_sla: { latency_ms: 200, jitter_ms: 40, packet_loss_pct: 2, bandwidth_mbps: 0 },
+    video_sla: { latency_ms: 150, jitter_ms: 30, packet_loss_pct: 3, bandwidth_mbps: 0 },
+};
+
+let customPorts = [];
+
+function applyPreset(name) {
+    const p = LINK_PRESETS[name];
+    if (p) {
+        document.getElementById('link-latency').value = p.latency_ms;
+        document.getElementById('link-jitter').value = p.jitter_ms;
+        document.getElementById('link-loss').value = p.packet_loss_pct;
+        document.getElementById('link-bw').value = p.bandwidth_mbps;
+    }
 }
 
-async function applyShaping() {
-    const body = {
-        latency_ms: parseInt(document.getElementById('latency').value),
-        jitter_ms: parseInt(document.getElementById('jitter').value),
-        packet_loss_pct: parseFloat(document.getElementById('loss').value),
-        bandwidth_mbps: parseInt(document.getElementById('bandwidth').value),
-    };
-    const res = await apiPost('/api/shaping', body);
-    addLog(`[SHAPING] ${res.message}`);
+function toggleLinkTarget() {
+    const sel = document.querySelector('input[name="link-target"]:checked').value;
+    document.getElementById('link-ports-config').style.display = sel === 'selected' ? 'block' : 'none';
 }
 
-async function clearShaping() {
-    await apiPost('/api/shaping/clear', {});
-    ['latency', 'jitter', 'loss', 'bandwidth'].forEach(id => {
-        document.getElementById(id).value = 0;
-        updateSlider(id);
+function addCustomPort() {
+    const port = parseInt(document.getElementById('link-custom-port').value);
+    const proto = document.getElementById('link-custom-proto').value;
+    if (!port || port < 1 || port > 65535) return;
+    customPorts.push({ port, protocol: proto });
+    document.getElementById('link-custom-port').value = '';
+    document.getElementById('link-custom-ports-list').textContent =
+        customPorts.map(p => `${p.protocol.toUpperCase()}:${p.port}`).join(', ');
+}
+
+function getSelectedPorts() {
+    const ports = [];
+    document.querySelectorAll('.link-port-cb:checked').forEach(cb => {
+        ports.push({ port: parseInt(cb.dataset.port), protocol: cb.dataset.proto });
     });
-    addLog('[SHAPING] Cleared');
+    return ports.concat(customPorts);
+}
+
+async function startLinkSim() {
+    const target = document.querySelector('input[name="link-target"]:checked').value;
+    const body = {
+        preset: 'custom',
+        latency_ms: parseInt(document.getElementById('link-latency').value) || 0,
+        jitter_ms: parseInt(document.getElementById('link-jitter').value) || 0,
+        packet_loss_pct: parseFloat(document.getElementById('link-loss').value) || 0,
+        bandwidth_mbps: parseInt(document.getElementById('link-bw').value) || 0,
+        target: target,
+        ports: target === 'selected' ? getSelectedPorts() : [],
+        cycle_mode: document.getElementById('link-cycle-toggle').checked,
+        healthy_duration: parseInt(document.getElementById('link-healthy-dur').value) || 30,
+        impaired_duration: parseInt(document.getElementById('link-impaired-dur').value) || 30,
+    };
+    const res = await apiPost('/api/link-simulation/start', body);
+    addLog(`[LINK SIM] ${res.message}`);
+}
+
+async function stopLinkSim() {
+    const res = await apiPost('/api/link-simulation/stop', {});
+    addLog(`[LINK SIM] ${res.message}`);
+}
+
+async function pollLinkSimStatus() {
+    try {
+        const resp = await fetch('/api/link-simulation/status');
+        const data = await resp.json();
+        const statusEl = document.getElementById('link-sim-status');
+        const phaseEl = document.getElementById('link-sim-phase');
+        const countdownEl = document.getElementById('link-sim-countdown');
+        if (data.active) {
+            statusEl.style.display = 'block';
+            const phase = data.phase || 'idle';
+            phaseEl.textContent = phase.toUpperCase();
+            phaseEl.style.color = phase === 'impaired' ? '#e74c3c' : phase === 'healthy' ? '#27ae60' : '#888';
+            if (data.cycle_mode && data.phase_remaining > 0) {
+                const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
+                countdownEl.textContent = `(Next: ${next} in ${data.phase_remaining}s)`;
+            } else {
+                countdownEl.textContent = '';
+            }
+        } else {
+            statusEl.style.display = 'none';
+        }
+    } catch (e) { /* ignore */ }
 }
 
 // ─── Status polling ────────────────────────────────────────
@@ -500,19 +565,41 @@ async function loadSourceIps() {
     } catch(e) {}
 }
 
-// ─── Shaping restore ────────────────────────────────────────
+// ─── Link Sim restore ───────────────────────────────────────
 
-async function loadShaping() {
+async function loadLinkSimStatus() {
     try {
-        const resp = await fetch('/api/shaping/current');
+        const resp = await fetch('/api/link-simulation/status');
         const data = await resp.json();
-        document.getElementById('latency').value = data.latency_ms;
-        document.getElementById('jitter').value = data.jitter_ms;
-        document.getElementById('loss').value = data.packet_loss_pct;
-        document.getElementById('bandwidth').value = data.bandwidth_mbps;
-        ['latency', 'jitter', 'loss', 'bandwidth'].forEach(updateSlider);
-        if (data.random_bandwidth) updateRandomBwStatus(true);
+        if (data.active && data.config) {
+            const c = data.config;
+            document.getElementById('link-latency').value = c.latency_ms || 0;
+            document.getElementById('link-jitter').value = c.jitter_ms || 0;
+            document.getElementById('link-loss').value = c.packet_loss_pct || 0;
+            document.getElementById('link-bw').value = c.bandwidth_mbps || 0;
+            if (c.cycle_mode) {
+                document.getElementById('link-cycle-toggle').checked = true;
+                document.getElementById('link-cycle-config').style.display = 'block';
+                document.getElementById('link-healthy-dur').value = c.healthy_duration || 30;
+                document.getElementById('link-impaired-dur').value = c.impaired_duration || 30;
+            }
+            if (c.target === 'selected') {
+                document.querySelector('input[name="link-target"][value="selected"]').checked = true;
+                document.getElementById('link-ports-config').style.display = 'block';
+            }
+        }
+        pollLinkSimStatus();
     } catch (e) { /* ignore */ }
+}
+
+async function loadRandomBwStatus() {
+    try {
+        const resp = await fetch('/api/shaping/random_bandwidth/status');
+        const data = await resp.json();
+        if (data.running) updateRandomBwStatus(true);
+    } catch (e) {
+        // fallback: endpoint may not exist, ignore
+    }
 }
 
 // ─── FTP File List ──────────────────────────────────────────
@@ -534,12 +621,16 @@ async function loadFtpFileList() {
 
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
-    loadShaping();
+    loadLinkSimStatus();
     loadSourceIps();
     loadFtpFileList();
     document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
-    autoRefreshInterval = setInterval(pollStatus, 2000);
+    document.getElementById('link-cycle-toggle').addEventListener('change', () => {
+        document.getElementById('link-cycle-config').style.display =
+            document.getElementById('link-cycle-toggle').checked ? 'block' : 'none';
+    });
+    autoRefreshInterval = setInterval(() => { pollStatus(); pollLinkSimStatus(); }, 2000);
     setInterval(loadFtpFileList, 10000);
     pollStatus();
     addLog('Dashboard ready.');

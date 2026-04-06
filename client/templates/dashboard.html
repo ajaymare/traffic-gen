@@ -28,35 +28,97 @@
         </div>
     </div>
 
-    <!-- Network Impairment -->
+    <!-- Link Simulation -->
     <div class="card">
-        <div class="card-header">Network Impairment (tc/netem)</div>
+        <div class="card-header">Link Simulation</div>
         <div class="card-body">
-            <div class="shaping-grid">
-                <div class="slider-group">
-                    <label>Latency <span class="slider-value" id="latency-val">0</span> ms</label>
-                    <input type="range" id="latency" min="0" max="500" value="0" oninput="updateSlider('latency')">
-                </div>
-                <div class="slider-group">
-                    <label>Jitter <span class="slider-value" id="jitter-val">0</span> ms</label>
-                    <input type="range" id="jitter" min="0" max="200" value="0" oninput="updateSlider('jitter')">
-                </div>
-                <div class="slider-group">
-                    <label>Packet Loss <span class="slider-value" id="loss-val">0</span> %</label>
-                    <input type="range" id="loss" min="0" max="50" value="0" step="0.5" oninput="updateSlider('loss')">
-                </div>
-                <div class="slider-group">
-                    <label>Bandwidth <span class="slider-value" id="bandwidth-val">0</span> Mbps (0=unlimited)</label>
-                    <input type="range" id="bandwidth" min="0" max="1000" value="0" step="10" oninput="updateSlider('bandwidth')">
+            <!-- Target -->
+            <div style="margin-bottom:12px">
+                <label style="display:inline-flex;align-items:center;gap:4px;margin-right:16px">
+                    <input type="radio" name="link-target" value="all" checked onchange="toggleLinkTarget()"> All Traffic
+                </label>
+                <label style="display:inline-flex;align-items:center;gap:4px">
+                    <input type="radio" name="link-target" value="selected" onchange="toggleLinkTarget()"> Selected Protocols
+                </label>
+                <div id="link-ports-config" style="display:none;margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="443" data-proto="tcp"> HTTPS (443)</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="5201" data-proto="tcp"> iperf3 (5201)</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="21" data-proto="tcp"> FTP (21)</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="2222" data-proto="tcp"> SSH (2222)</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="9999" data-proto="tcp"> TCP (9999)</label>
+                        <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="link-port-cb" data-port="9998" data-proto="udp"> UDP (9998)</label>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <label style="font-size:12px">Custom Port</label>
+                        <input type="number" id="link-custom-port" placeholder="Port" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
+                        <select id="link-custom-proto" style="padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="addCustomPort()" style="padding:4px 12px;font-size:12px">Add</button>
+                        <span id="link-custom-ports-list" style="font-size:11px;color:#888"></span>
+                    </div>
                 </div>
             </div>
-            <div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">
+            <!-- Presets -->
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Presets</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    <button class="btn btn-secondary" onclick="applyPreset('link_down')" style="padding:4px 12px;font-size:12px">Link Down</button>
+                    <button class="btn btn-secondary" onclick="applyPreset('degraded_wan')" style="padding:4px 12px;font-size:12px">Degraded WAN</button>
+                    <button class="btn btn-secondary" onclick="applyPreset('voice_sla')" style="padding:4px 12px;font-size:12px">Voice SLA</button>
+                    <button class="btn btn-secondary" onclick="applyPreset('video_sla')" style="padding:4px 12px;font-size:12px">Video SLA</button>
+                    <button class="btn btn-secondary" onclick="applyPreset('custom')" style="padding:4px 12px;font-size:12px">Custom</button>
+                </div>
+            </div>
+            <!-- Impaired State Values -->
+            <div style="margin-bottom:12px">
+                <label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Impaired State</label>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                    <label style="font-size:12px">Latency</label>
+                    <input type="number" id="link-latency" value="0" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">ms</span>
+                    <label style="font-size:12px;margin-left:8px">Jitter</label>
+                    <input type="number" id="link-jitter" value="0" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">ms</span>
+                    <label style="font-size:12px;margin-left:8px">Packet Loss</label>
+                    <input type="number" id="link-loss" value="0" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">%</span>
+                    <label style="font-size:12px;margin-left:8px">Bandwidth</label>
+                    <input type="number" id="link-bw" value="0" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">Mbps (0=unlimited)</span>
+                </div>
+            </div>
+            <!-- Cycle Mode -->
+            <div style="margin-bottom:12px;padding:10px;background:#f0f2f5;border-radius:8px">
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <input type="checkbox" id="link-cycle-toggle"> <strong>Cycle Mode</strong> (alternate healthy/impaired)
+                </label>
+                <div id="link-cycle-config" style="display:none;margin-top:8px">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                        <label style="font-size:12px">Healthy</label>
+                        <input type="number" id="link-healthy-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">sec</span>
+                        <label style="font-size:12px;margin-left:8px">Impaired</label>
+                        <input type="number" id="link-impaired-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"> <span style="font-size:12px">sec</span>
+                    </div>
+                </div>
+            </div>
+            <!-- Status -->
+            <div id="link-sim-status" style="margin-bottom:12px;padding:8px 12px;background:#f0f2f5;border-radius:8px;font-size:13px;display:none">
+                Status: <span id="link-sim-phase" style="font-weight:600">idle</span>
+                <span id="link-sim-countdown" style="margin-left:8px;color:#888"></span>
+            </div>
+            <!-- Actions -->
+            <div class="shaping-actions">
+                <button class="btn btn-start" onclick="startLinkSim()">Start</button>
+                <button class="btn btn-stop" onclick="stopLinkSim()">Stop</button>
+            </div>
+            <!-- Random Bandwidth -->
+            <div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">
+                <label style="display:flex;align-items:center;gap:8px">
                     <input type="checkbox" id="random-bw-toggle">
                     <strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)
                     <span id="random-bw-status" style="color:#888;margin-left:8px"></span>
                 </label>
             </div>
+            <!-- Source IPs -->
             <div style="margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">
                 <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
                     <input type="checkbox" id="source-ip-toggle">
@@ -72,10 +134,6 @@
                     </div>
                     <div id="source-ip-list" style="margin-top:8px;font-size:11px;color:#888"></div>
                 </div>
-            </div>
-            <div class="shaping-actions">
-                <button class="btn btn-primary" onclick="applyShaping()">Apply Shaping</button>
-                <button class="btn btn-secondary" onclick="clearShaping()">Clear All</button>
             </div>
         </div>
     </div>
