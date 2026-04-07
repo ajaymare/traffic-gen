@@ -457,23 +457,13 @@ class TrafficEngine:
         question = qname + st.pack('!HH', 1, 1)
         return header + question
 
-    # ─── iperf3 (dedicated protocols) ─────────────────────
+    # ─── iperf3 ───────────────────────────────────────────
 
-    def _run_iperf_tcp(self, job: TrafficJob):
-        self._run_iperf_full(job, 'tcp')
-
-    def _run_iperf_udp(self, job: TrafficJob):
-        self._run_iperf_full(job, 'udp')
-
-    # ─── iperf3 helper ──────────────────────────────────────
-
-    # Server runs iperf3 on ports 5201-5203 for concurrent clients
-    IPERF_PORTS = [5201, 5202, 5203]
-
-    def _run_iperf_full(self, job, proto):
+    def _run_iperf(self, job: TrafficJob):
         cfg = job.config
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 5201))
+        proto = cfg.get('protocol', 'TCP').lower()
         bandwidth = cfg.get('bandwidth', '100M')
         parallel = int(cfg.get('parallel', 1))
         reverse = cfg.get('reverse', False)

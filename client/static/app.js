@@ -24,26 +24,13 @@ const PROTOCOLS = {
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
-    iperf_tcp: {
-        name: 'iperf3 TCP',
+    iperf: {
+        name: 'iperf3',
         appId: 'iperf',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 5201 },
-            { key: 'bandwidth', label: 'Bandwidth', type: 'text', default: '100M' },
-            { key: 'parallel', label: 'Parallel Streams', type: 'number', default: 1 },
-            { key: 'reverse', label: 'Reverse (download)', type: 'checkbox', default: false },
-            { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
-            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
-            { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
-        ]
-    },
-    iperf_udp: {
-        name: 'iperf3 UDP',
-        appId: 'iperf',
-        fields: [
-            { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
-            { key: 'port', label: 'Port', type: 'number', default: 5201 },
+            { key: 'protocol', label: 'Protocol', type: 'select', options: ['TCP', 'UDP'], default: 'TCP' },
             { key: 'bandwidth', label: 'Bandwidth', type: 'text', default: '100M' },
             { key: 'parallel', label: 'Parallel Streams', type: 'number', default: 1 },
             { key: 'reverse', label: 'Reverse (download)', type: 'checkbox', default: false },

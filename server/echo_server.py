@@ -29,6 +29,12 @@ class TrafficHTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass  # Suppress default logging
 
+    def handle(self):
+        try:
+            super().handle()
+        except (ConnectionResetError, BrokenPipeError, ConnectionAbortedError):
+            pass  # Client disconnected mid-request — normal during link simulation
+
     def do_GET(self):
         with stats_lock:
             stats['http']['requests'] += 1
