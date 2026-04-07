@@ -250,6 +250,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     threading.Thread(target=save_stats, daemon=True).start()
     threading.Thread(target=http_server, daemon=True).start()
-    threading.Thread(target=dns_server, daemon=True).start()
+    threading.Thread(target=lambda: dns_server(port=53), daemon=True).start()
     print("[NET] HTTP + DNS servers started")
     threading.Event().wait()

@@ -393,7 +393,7 @@ class TrafficEngine:
         """Send DNS A-record queries to the DNS forwarder on port 9998 (App-ID: dns)."""
         cfg = job.config
         host = cfg.get('host', 'server')
-        port = int(cfg.get('port', 9998))
+        port = int(cfg.get('port', 53))
         domains_raw = cfg.get('domains', 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com')
         # Handle literal \n from textarea, commas, and real newlines
         domains_raw = domains_raw.replace('\\n', '\n').replace(',', '\n')
@@ -610,6 +610,7 @@ class TrafficEngine:
     # ─── SSH ────────────────────────────────────────────────
 
     def _run_ssh(self, job: TrafficJob):
+        """SSH via sshpass + native ssh command — avoids paramiko issues."""
         cfg = job.config
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 2222))
@@ -623,72 +624,44 @@ class TrafficEngine:
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
         job.log(f"SSH {username}@{host}:{port} cmd='{command}' interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
-        client = None
-        while not job.should_stop():
-            # Establish/re-establish persistent connection
-            if client is None:
-                try:
-                    client = paramiko.SSHClient()
-                    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                    client.connect(host, port=port, username=username,
-                                   password=password, timeout=10,
-                                   banner_timeout=15,
-                                   allow_agent=False, look_for_keys=False)
-                    transport = client.get_transport()
-                    if transport:
-                        transport.set_keepalive(15)  # send keepalive every 15s
-                        if tos > 0:
-                            try:
-                                _set_tos(transport.sock, tos)
-                            except Exception:
-                                pass
-                    job.log(f"SSH connected to {host}:{port}")
-                except Exception as e:
-                    job.stats['errors'] += 1
-                    job.log(f"SSH connect error: {username}@{host}:{port} — {e}")
-                    client = None
-                    time.sleep(3)
-                    continue
+        ssh_opts = [
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'UserKnownHostsFile=/dev/null',
+            '-o', 'LogLevel=ERROR',
+            '-o', 'ConnectTimeout=10',
+            '-o', f'ServerAliveInterval=15',
+            '-p', str(port),
+        ]
 
+        while not job.should_stop():
             for _ in range(burst_count):
                 if job.should_stop():
                     break
                 try:
-                    # Check if transport is still active
-                    transport = client.get_transport()
-                    if not transport or not transport.is_active():
-                        raise EOFError("Connection lost")
-                    stdin, stdout, stderr = client.exec_command(command, timeout=10)
-                    out = stdout.read().decode().strip()
-                    err = stderr.read().decode().strip()
-                    exit_code = stdout.channel.recv_exit_status()
+                    cmd = ['sshpass', '-p', password, 'ssh'] + ssh_opts + [
+                        f'{username}@{host}', command
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                    out = result.stdout.strip()
+                    err = result.stderr.strip()
                     job.stats['requests'] += 1
                     job.stats['bytes_recv'] += len(out)
-                    job.log(f"SSH {username}@{host} $ {command} → exit={exit_code} | recv={len(out)}B | {out[:150]}")
-                    if err:
+                    job.log(f"SSH {username}@{host} $ {command} → exit={result.returncode} | recv={len(out)}B | {out[:150]}")
+                    if err and result.returncode != 0:
                         job.log(f"SSH stderr: {err[:200]}")
+                        job.stats['errors'] += 1
+                except subprocess.TimeoutExpired:
+                    job.stats['errors'] += 1
+                    job.log(f"SSH timeout: {username}@{host}:{port}")
                 except Exception as e:
                     job.stats['errors'] += 1
                     job.log(f"SSH error: {username}@{host}:{port} — {e}")
-                    # Close broken connection, will reconnect on next loop
-                    try:
-                        client.close()
-                    except Exception:
-                        pass
-                    client = None
-                    time.sleep(2)
-                    break
                 if burst_count == 1:
                     time.sleep(interval)
             if burst_count > 1:
                 job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
                 time.sleep(burst_pause)
 
-        if client:
-            try:
-                client.close()
-            except Exception:
-                pass
         job.log("Stopped")
 
     # ─── External HTTPS ────────────────────────────────────

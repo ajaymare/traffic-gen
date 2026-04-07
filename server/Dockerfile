@@ -39,7 +39,7 @@ RUN mkdir -p /data/uploads && \
     chmod 444 /data/testfile_100mb.bin && \
     chmod 755 /data/uploads
 
-EXPOSE 80 443 5201-5203 5201-5203/udp 9999 9998/udp 21 21100-21110 2222 8082 8443
+EXPOSE 53/udp 80 443 5201-5203 5201-5203/udp 9999 21 21100-21110 2222 8082 8443
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
     CMD curl -f http://localhost/health || exit 1

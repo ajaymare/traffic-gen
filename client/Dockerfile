@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    iproute2 iptables iputils-ping iperf3 hping3 curl nginx openssl supervisor sudo \
+    iproute2 iptables iputils-ping iperf3 hping3 curl nginx openssl supervisor sudo openssh-client sshpass \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user with sudo access for network commands (tc, iptables, ip)

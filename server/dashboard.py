@@ -380,7 +380,7 @@ const PROTOCOLS = {
     ]},
     dns: { name: 'DNS', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
-        { key: 'port', label: 'Port', type: 'number', default: 9998 },
+        { key: 'port', label: 'Port', type: 'number', default: 53 },
         { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\\namazon.com\\nmicrosoft.com\\ngithub.com\\ncloudflare.com' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
@@ -606,7 +606,7 @@ async function renderClientTab(name) {
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="21" data-proto="tcp"> FTP (21)</label>' +
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="2222" data-proto="tcp"> SSH (2222)</label>' +
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9999" data-proto="tcp"> HTTP Plain (9999)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9998" data-proto="udp"> DNS (9998)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="53" data-proto="udp"> DNS (53)</label>' +
         '</div></div></div>' +
         // Presets
         '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Presets</label>' +
@@ -1290,7 +1290,7 @@ def get_connections_and_counts():
     """Single ss call returning (connections_list, port_counts_dict)."""
     ports = {
         80: 'HTTP', 443: 'HTTPS', 5201: 'iperf3',
-        9999: 'HTTP (9999)', 9998: 'DNS (9998)',
+        9999: 'HTTP (9999)', 53: 'DNS (53)',
         21: 'FTP', 2222: 'SSH',
     }
     connections = []
@@ -1393,8 +1393,8 @@ def server_stats():
                 'bytes_sent': echo_http.get('bytes_sent', 0),
             }
         },
-        'DNS (9998)': {
-            'active_connections': max(conn_counts.get(9998, 0), 1 if (time.time() - echo_dns.get('last_active', 0)) < 10 else 0),
+        'DNS (53)': {
+            'active_connections': max(conn_counts.get(53, 0), 1 if (time.time() - echo_dns.get('last_active', 0)) < 10 else 0),
             'stats': {
                 'queries': echo_dns.get('queries', 0),
                 'forwarded': echo_dns.get('forwarded', 0),
@@ -1442,7 +1442,7 @@ def server_stats():
 SERVICE_PROGRAMS = {
     'HTTP/HTTPS': ['nginx'],
     'HTTP (9999)': ['echo_server'],
-    'DNS (9998)': ['echo_server'],
+    'DNS (53)': ['echo_server'],
     'iperf3': ['iperf3_5201', 'iperf3_5202', 'iperf3_5203'],
     'FTP': ['vsftpd'],
     'SSH': ['sshd'],
