@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 ARG SUDO_PASSWORD=trafficgen
 RUN useradd -m -s /bin/bash appuser && \
     echo "appuser:${SUDO_PASSWORD}" | chpasswd && \
-    echo 'appuser ALL=(root) PASSWD: /sbin/tc, /usr/sbin/tc, /sbin/iptables, /usr/sbin/iptables, /sbin/ip, /usr/sbin/ip' > /etc/sudoers.d/appuser && \
+    echo 'appuser ALL=(root) PASSWD: /sbin/tc, /usr/sbin/tc, /sbin/iptables, /usr/sbin/iptables, /sbin/ip, /usr/sbin/ip, /usr/sbin/hping3' > /etc/sudoers.d/appuser && \
     chmod 0440 /etc/sudoers.d/appuser
 
 # Generate self-signed SSL cert for dashboard HTTPS

@@ -490,7 +490,8 @@ class TrafficEngine:
                 if proc.returncode != 0 and stderr:
                     err_lower = stderr.lower()
                     if any(s in err_lower for s in ['server is busy', 'connection refused',
-                            'unable to connect', 'no route to host', 'server side protocol']):
+                            'unable to connect', 'no route to host', 'server side protocol',
+                            'control socket has closed']):
                         job.log(f"Port {port} unavailable ({stderr.strip()[:80]}), trying next...")
                         continue
 
@@ -521,11 +522,11 @@ class TrafficEngine:
         port = int(cfg.get('port', 21))
         username = cfg.get('username', 'anonymous')
         password = cfg.get('password', '')
-        filename = cfg.get('filename', 'testfile_1gb.bin')
+        filename = cfg.get('filename', 'testfile_100mb.bin')
         random_size = cfg.get('random_size', False)
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
-        ftp_files = ['testfile_100mb.bin', 'testfile_1gb.bin']
+        ftp_files = ['testfile_100mb.bin']
 
         job.log(f"FTP continuous download from {host}:{port} random_size={random_size} DSCP={dscp}(TOS={tos})")
 
@@ -600,18 +601,18 @@ class TrafficEngine:
                     break
                 client = None
                 try:
-                    # Create socket with DSCP/TOS marking
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    sock.settimeout(10)
-                    _set_tos(sock, tos)
-                    sock.connect((host, port))
                     client = paramiko.SSHClient()
                     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-                    # Pass sock to paramiko — paramiko takes ownership and closes it
                     client.connect(host, port=port, username=username,
                                    password=password, timeout=10,
-                                   allow_agent=False, look_for_keys=False,
-                                   sock=sock)
+                                   allow_agent=False, look_for_keys=False)
+                    # Set DSCP/TOS on the underlying socket after connection
+                    transport = client.get_transport()
+                    if transport and tos > 0:
+                        try:
+                            _set_tos(transport.sock, tos)
+                        except Exception:
+                            pass
                     stdin, stdout, stderr = client.exec_command(command, timeout=10)
                     out = stdout.read().decode().strip()
                     err = stderr.read().decode().strip()
@@ -710,7 +711,17 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
-        cmd = ['hping3', host, '--ttl', str(ttl), '-d', str(packet_size)]
+        # hping3 requires raw sockets — must run via sudo
+        import network_shaper
+        sudo_pw = None
+        with network_shaper._sudo_lock:
+            sudo_pw = network_shaper._sudo_password
+        if not sudo_pw:
+            job.log("hping3 requires sudo — authenticate first in Link Simulation")
+            job.stats['errors'] += 1
+            return
+
+        cmd = ['sudo', '-S', 'hping3', host, '--ttl', str(ttl), '-d', str(packet_size)]
 
         # Mode flags
         mode_map = {
@@ -741,12 +752,14 @@ class TrafficEngine:
                 f"flood={flood} DSCP={dscp}(TOS={tos})")
 
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            proc.stdin.write(sudo_pw + '\n')
+            proc.stdin.flush()
             while not job.should_stop() and proc.poll() is None:
                 line = proc.stdout.readline()
                 if line:
                     stripped = line.strip()
-                    if stripped:
+                    if stripped and '[sudo]' not in stripped:
                         job.stats['requests'] += 1
                         job.stats['bytes_sent'] += packet_size
                         if 'rtt=' in stripped or 'flags=' in stripped or 'ip=' in stripped:
@@ -761,7 +774,7 @@ class TrafficEngine:
             remaining = proc.stdout.read()
             if remaining:
                 for line in remaining.strip().split('\n'):
-                    if line.strip():
+                    if line.strip() and '[sudo]' not in line:
                         job.log(f"hping3 {host} → {line.strip()}")
         except Exception as e:
             job.stats['errors'] += 1

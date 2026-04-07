@@ -108,6 +108,7 @@ const PROTOCOLS = {
     ftp: {
         name: 'FTP',
         appId: 'ftp',
+        maxFlows: 1,
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 21 },
@@ -116,11 +117,6 @@ const PROTOCOLS = {
             { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
-            { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
-            { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
-            { key: 'burst_count', label: 'Burst Size', type: 'number', default: 5 },
-            { key: 'burst_pause', label: 'Burst Pause (s)', type: 'number', default: 2, step: 0.5 },
-            { key: 'flows', label: 'Flows', type: 'number', default: 1 },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
@@ -245,7 +241,8 @@ function getFlowCount(proto) {
 
 async function startProto(proto) {
     const config = getConfig(proto);
-    const flows = getFlowCount(proto);
+    const maxFlows = PROTOCOLS[proto].maxFlows || 20;
+    const flows = Math.min(getFlowCount(proto), maxFlows);
     if (flows === 1) {
         const res = await apiPost('/api/start', { protocol: proto, config });
         addLog(`[${proto.toUpperCase()}] ${res.message}`);

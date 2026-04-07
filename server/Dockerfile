@@ -34,7 +34,9 @@ COPY app.py echo_server.py dashboard.py stats_collector.py ./
 # Generate test files for FTP/HTTP download
 RUN mkdir -p /data/uploads && \
     dd if=/dev/urandom of=/data/testfile_100mb.bin bs=1M count=100 && \
-    chown -R ftp:ftp /data
+    chown -R ftp:ftp /data && \
+    chmod 555 /data && \
+    chmod 755 /data/uploads
 
 EXPOSE 80 443 5201-5203 5201-5203/udp 9999 9998/udp 21 21100-21110 2222 8082 8443
 

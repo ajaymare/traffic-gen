@@ -261,7 +261,10 @@ DASHBOARD_HTML = r"""
         </div>
     </div>
     <div class="card">
-        <div class="card-header">Services</div>
+        <div class="card-header">
+            Services
+            <button class="btn btn-danger" onclick="restartAllServices()" style="padding:4px 12px;font-size:12px">Restart All</button>
+        </div>
         <div class="card-body"><div class="services-grid" id="services-grid"></div></div>
     </div>
     <div class="card">
@@ -448,6 +451,29 @@ let clientLogs = {};
 let pollInterval = null;
 
 // ─── Helpers ──────────────────────────────────────────────────
+async function restartService(name) {
+    if (!confirm('Restart ' + name + '?')) return;
+    try {
+        const resp = await fetch('/api/service/restart', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({service: name})
+        });
+        const data = await resp.json();
+        alert(data.message + '\n' + (data.results || []).join('\n'));
+    } catch(e) { alert('Failed to restart: ' + e); }
+}
+
+async function restartAllServices() {
+    if (!confirm('Restart ALL server services?')) return;
+    try {
+        const resp = await fetch('/api/service/restart-all', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}
+        });
+        const data = await resp.json();
+        alert(data.message + '\n' + (data.output || ''));
+    } catch(e) { alert('Failed to restart: ' + e); }
+}
+
 function fmtBytes(b) {
     if (b < 1024) return b + ' B';
     if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
@@ -1112,6 +1138,8 @@ async function pollServerStatus() {
             }
             grid.innerHTML += '<div class="service-card"><div class="service-header">' +
                 '<span class="service-name">' + name + '</span>' + badge +
+                '<button class="btn btn-secondary" onclick="restartService(\'' + name + '\')" ' +
+                'style="padding:2px 8px;font-size:10px;margin-left:auto">Restart</button>' +
                 '</div>' + statsHtml + '</div>';
         }
         const tbody = document.getElementById('conn-table-body');
@@ -1413,6 +1441,54 @@ def server_stats():
         'services': services,
         'connections': connections,
     })
+
+
+# Map display names to supervisord program names
+SERVICE_PROGRAMS = {
+    'HTTP/HTTPS': ['nginx'],
+    'TCP Echo': ['echo_server'],
+    'UDP Echo': ['echo_server'],
+    'iperf3': ['iperf3_5201', 'iperf3_5202', 'iperf3_5203'],
+    'FTP': ['vsftpd'],
+    'SSH': ['sshd'],
+}
+
+
+@app.route('/api/service/restart', methods=['POST'])
+def restart_service():
+    d = request.get_json(force=True, silent=True) or {}
+    service_name = d.get('service', '')
+    if not service_name:
+        return jsonify({"error": "service name required"}), 400
+
+    programs = SERVICE_PROGRAMS.get(service_name)
+    if not programs:
+        return jsonify({"error": f"Unknown service: {service_name}"}), 400
+
+    results = []
+    for prog in programs:
+        try:
+            result = subprocess.run(
+                ['supervisorctl', 'restart', prog],
+                capture_output=True, text=True, timeout=15)
+            results.append(f"{prog}: {result.stdout.strip() or result.stderr.strip()}")
+        except Exception as e:
+            results.append(f"{prog}: error — {e}")
+
+    return jsonify({"ok": True, "service": service_name, "results": results,
+                    "message": f"{service_name} restarted"})
+
+
+@app.route('/api/service/restart-all', methods=['POST'])
+def restart_all_services():
+    try:
+        result = subprocess.run(
+            ['supervisorctl', 'restart', 'all'],
+            capture_output=True, text=True, timeout=30)
+        return jsonify({"ok": True, "message": "All services restarted",
+                        "output": result.stdout.strip()})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ─── Client Registry ────────────────────────────────────────
