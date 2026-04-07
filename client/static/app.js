@@ -336,6 +336,16 @@ function getSelectedPorts() {
 }
 
 async function startLinkSim() {
+    // Check sudo auth first
+    try {
+        const authResp = await fetch('/api/sudo');
+        const authData = await authResp.json();
+        if (!authData.authenticated) {
+            addLog('[LINK SIM] Sudo password required — authenticate first');
+            document.getElementById('sudo-password').focus();
+            return;
+        }
+    } catch (e) {}
     const target = document.querySelector('input[name="link-target"]:checked').value;
     const body = {
         preset: 'custom',
@@ -475,6 +485,27 @@ async function pollStatus() {
         document.getElementById('stat-recv').textContent = fmtBytes(totRecv);
         document.getElementById('stat-reqs').textContent = totReqs.toLocaleString();
         document.getElementById('stat-errors').textContent = totErrs.toLocaleString();
+
+        // Render activity logs from traffic engine
+        let allLogs = [];
+        for (const [proto, info] of Object.entries(data.jobs)) {
+            if (info.logs) {
+                for (const line of info.logs) {
+                    allLogs.push('[' + proto.toUpperCase() + '] ' + line);
+                }
+            }
+        }
+        if (allLogs.length > 0) {
+            const panel = document.getElementById('log-panel');
+            const last100 = allLogs.slice(-100);
+            panel.innerHTML = last100.map(l => {
+                const cls = l.toLowerCase().includes('error') ? ' error' : '';
+                const d = document.createElement('div');
+                d.textContent = l;
+                return `<div class="log-entry${cls}">${d.innerHTML}</div>`;
+            }).join('');
+            panel.scrollTop = panel.scrollHeight;
+        }
     } catch (e) { /* ignore */ }
 }
 
@@ -565,6 +596,74 @@ async function loadSourceIps() {
     } catch(e) {}
 }
 
+// ─── Sudo Authentication ────────────────────────────────────
+
+async function authenticateSudo() {
+    const pw = document.getElementById('sudo-password').value;
+    if (!pw) { addLog('[SUDO] Password required'); return; }
+    const res = await apiPost('/api/sudo', { password: pw });
+    if (res.authenticated) {
+        document.getElementById('sudo-password').value = '';
+        updateSudoStatus(true);
+        addLog('[SUDO] Authenticated successfully');
+    } else {
+        addLog('[SUDO] Authentication failed — invalid password');
+        updateSudoStatus(false);
+    }
+}
+
+function updateSudoStatus(authenticated) {
+    const section = document.getElementById('sudo-auth-section');
+    const status = document.getElementById('sudo-auth-status');
+    const icon = document.getElementById('sudo-auth-icon');
+    const pwInput = document.getElementById('sudo-password');
+    if (authenticated) {
+        section.style.background = '#e8f5e9';
+        section.style.borderColor = '#81c784';
+        status.textContent = 'Authenticated';
+        status.style.color = '#2e7d32';
+        icon.innerHTML = '&#128275;';
+        pwInput.style.display = 'none';
+        document.querySelector('#sudo-auth-section .btn-primary').style.display = 'none';
+    } else {
+        section.style.background = '#fff3e0';
+        section.style.borderColor = '#ffcc80';
+        status.textContent = 'Not authenticated';
+        status.style.color = '#888';
+        icon.innerHTML = '&#128274;';
+        pwInput.style.display = '';
+        document.querySelector('#sudo-auth-section .btn-primary').style.display = '';
+    }
+}
+
+async function loadSudoStatus() {
+    try {
+        const resp = await fetch('/api/sudo');
+        const data = await resp.json();
+        updateSudoStatus(data.authenticated);
+    } catch (e) {}
+}
+
+// ─── Interface ──────────────────────────────────────────────
+
+async function loadInterface() {
+    try {
+        const resp = await fetch('/api/interface');
+        const data = await resp.json();
+        const el = document.getElementById('link-interface-name');
+        if (el) el.textContent = data.interface || 'unknown';
+    } catch (e) {}
+}
+
+async function changeInterface() {
+    const iface = prompt('Enter network interface name (e.g. eth0, eth1, ens192):');
+    if (!iface) return;
+    const res = await apiPost('/api/interface', { interface: iface });
+    addLog('[INTERFACE] ' + res.message);
+    const el = document.getElementById('link-interface-name');
+    if (el) el.textContent = res.interface || iface;
+}
+
 // ─── Link Sim restore ───────────────────────────────────────
 
 async function loadLinkSimStatus() {
@@ -621,6 +720,8 @@ async function loadFtpFileList() {
 
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
+    loadSudoStatus();
+    loadInterface();
     loadLinkSimStatus();
     loadSourceIps();
     loadFtpFileList();

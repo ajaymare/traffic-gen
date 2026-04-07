@@ -5,6 +5,7 @@ Requires NET_ADMIN capability.
 import os
 import re
 import random
+import socket
 import subprocess
 import logging
 import threading
@@ -19,7 +20,90 @@ _random_bw_lock = threading.Lock()
 # Track last applied settings so the API can return them accurately
 _last_shaping = {"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0}
 
-INTERFACE = os.environ.get('SHAPER_INTERFACE', 'eth0')
+# Sudo password for privileged commands (tc, iptables, ip)
+_sudo_password = None
+_sudo_lock = threading.Lock()
+# Commands that require sudo
+_SUDO_COMMANDS = {'tc', 'iptables', 'ip'}
+
+
+def set_sudo_password(password):
+    """Store the sudo password for privileged commands."""
+    global _sudo_password
+    with _sudo_lock:
+        _sudo_password = password
+    logger.info("Sudo password updated")
+
+
+def get_sudo_authenticated():
+    """Check if sudo password has been set."""
+    with _sudo_lock:
+        return _sudo_password is not None
+
+
+def verify_sudo_password(password):
+    """Verify sudo password by running a test command."""
+    try:
+        proc = subprocess.run(
+            ['sudo', '-S', '-v'],
+            input=password + '\n', capture_output=True, text=True, timeout=5)
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
+def _detect_interface():
+    """Auto-detect the network interface used to reach SERVER_HOST.
+
+    Uses 'ip route get <server_ip>' to find the outgoing interface.
+    Falls back to SHAPER_INTERFACE env var, then 'eth0'.
+    """
+    env_iface = os.environ.get('SHAPER_INTERFACE')
+    if env_iface:
+        logger.info(f"Using interface from SHAPER_INTERFACE env: {env_iface}")
+        return env_iface
+
+    server_host = os.environ.get('SERVER_HOST', '')
+    if server_host:
+        try:
+            # Resolve hostname to IP first if needed
+            try:
+                server_ip = socket.gethostbyname(server_host)
+            except socket.gaierror:
+                server_ip = server_host
+
+            result = subprocess.run(
+                ['ip', 'route', 'get', server_ip],
+                capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                # Output like: "10.0.0.2 dev eth1 src 10.0.0.1 uid 0"
+                match = re.search(r'dev\s+(\S+)', result.stdout)
+                if match:
+                    iface = match.group(1)
+                    logger.info(f"Auto-detected interface '{iface}' for server {server_host} ({server_ip})")
+                    return iface
+        except Exception as e:
+            logger.warning(f"Interface auto-detection failed: {e}")
+
+    # Fallback: find default route interface
+    try:
+        result = subprocess.run(
+            ['ip', 'route', 'show', 'default'],
+            capture_output=True, text=True, timeout=5)
+        if result.returncode == 0:
+            match = re.search(r'dev\s+(\S+)', result.stdout)
+            if match:
+                iface = match.group(1)
+                logger.info(f"Using default route interface: {iface}")
+                return iface
+    except Exception as e:
+        logger.warning(f"Default route detection failed: {e}")
+
+    logger.info("Falling back to eth0")
+    return 'eth0'
+
+
+INTERFACE = _detect_interface()
 
 
 def _validate_ip(ip):
@@ -33,12 +117,56 @@ def _validate_ip(ip):
     return ip
 
 
+def _needs_sudo(cmd):
+    """Check if a command needs sudo. Read-only commands don't need sudo."""
+    if cmd[0] not in _SUDO_COMMANDS:
+        return False
+    # ip route get/show and ip addr show are read-only
+    if cmd[0] == 'ip' and len(cmd) >= 2:
+        if cmd[1] == 'route':
+            return False
+        if cmd[1:3] == ['-4', 'addr'] or (cmd[1] == 'addr' and 'show' in cmd):
+            return False
+    # tc qdisc show is read-only
+    if cmd[0] == 'tc' and 'show' in cmd:
+        return False
+    return True
+
+
 def _run(cmd):
-    """Run a command as a list (no shell). cmd is a list of strings."""
-    logger.info(f"cmd: {cmd}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    """Run a command as a list (no shell). Uses sudo for privileged commands."""
+    needs_sudo = _needs_sudo(cmd)
+    if needs_sudo:
+        with _sudo_lock:
+            password = _sudo_password
+        if password is None:
+            logger.warning(f"Sudo password not set, cannot run: {cmd[0]}")
+            return False, "Sudo password not set — authenticate first"
+        sudo_cmd = ['sudo', '-S'] + cmd
+        logger.info(f"cmd: sudo {cmd}")
+        try:
+            result = subprocess.run(sudo_cmd, input=password + '\n',
+                                    capture_output=True, text=True, timeout=30)
+        except FileNotFoundError:
+            logger.warning(f"cmd not found: {cmd[0]}")
+            return False, f"{cmd[0]}: command not found"
+        except subprocess.TimeoutExpired:
+            logger.warning(f"cmd timeout: {cmd}")
+            return False, "Command timed out"
+    else:
+        logger.info(f"cmd: {cmd}")
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True)
+        except FileNotFoundError:
+            logger.warning(f"cmd not found: {cmd[0]}")
+            return False, f"{cmd[0]}: command not found"
     if result.returncode != 0:
-        logger.warning(f"cmd failed: {result.stderr.strip()}")
+        stderr = result.stderr.strip()
+        # Filter out sudo password prompt from error output
+        stderr_lines = [l for l in stderr.split('\n') if not l.startswith('[sudo]')]
+        stderr = '\n'.join(stderr_lines).strip()
+        if stderr:
+            logger.warning(f"cmd failed: {stderr}")
     return result.returncode == 0, result.stdout + result.stderr
 
 
@@ -370,7 +498,10 @@ def stop_link_simulation():
 def get_link_simulation_status():
     """Return current link simulation state."""
     with _link_sim_lock:
-        return dict(_link_sim_state)
+        state = dict(_link_sim_state)
+    state['interface'] = INTERFACE
+    state['sudo_authenticated'] = get_sudo_authenticated()
+    return state
 
 
 # ─── Source IP Aliases ──────────────────────────────────────
