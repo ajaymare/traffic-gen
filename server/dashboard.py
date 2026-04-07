@@ -372,11 +372,12 @@ const PROTOCOLS = {
         { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
-    tcp: { name: 'TCP', fields: [
+    http_plain: { name: 'HTTP (Plain)', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'port', label: 'Port', type: 'number', default: 9999 },
-        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-        { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+        { key: 'method', label: 'Method', type: 'select', options: ['GET','POST'], default: 'GET' },
+        { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -386,12 +387,11 @@ const PROTOCOLS = {
         { key: 'flows', label: 'Flows', type: 'number', default: 1 },
         { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
     ]},
-    udp: { name: 'UDP', fields: [
+    dns: { name: 'DNS', fields: [
         { key: 'host', label: 'Host', type: 'text', default: 'server' },
         { key: 'port', label: 'Port', type: 'number', default: 9998 },
-        { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-        { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
-        { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\\namazon.com\\nmicrosoft.com\\ngithub.com\\ncloudflare.com' },
+        { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -614,8 +614,8 @@ async function renderClientTab(name) {
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="5201" data-proto="tcp"> iperf3 (5201)</label>' +
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="21" data-proto="tcp"> FTP (21)</label>' +
         '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="2222" data-proto="tcp"> SSH (2222)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9999" data-proto="tcp"> TCP (9999)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9998" data-proto="udp"> UDP (9998)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9999" data-proto="tcp"> HTTP Plain (9999)</label>' +
+        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9998" data-proto="udp"> DNS (9998)</label>' +
         '</div></div></div>' +
         // Presets
         '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Presets</label>' +
@@ -1299,7 +1299,7 @@ def get_connections_and_counts():
     """Single ss call returning (connections_list, port_counts_dict)."""
     ports = {
         80: 'HTTP', 443: 'HTTPS', 5201: 'iperf3',
-        9999: 'TCP Echo', 9998: 'UDP Echo',
+        9999: 'HTTP (9999)', 9998: 'DNS (9998)',
         21: 'FTP', 2222: 'SSH',
     }
     connections = []
@@ -1368,15 +1368,15 @@ def server_stats():
     ssh = read_json_file('/tmp/ssh_stats.json')
     connections, conn_counts = get_connections_and_counts()
 
-    tcp_echo = echo.get('tcp', {})
-    udp_echo = echo.get('udp', {})
+    echo_http = echo.get('http', {})
+    echo_dns = echo.get('dns', {})
 
-    total_recv = (http.get('bytes_recv', 0) + tcp_echo.get('bytes_recv', 0) +
-                  udp_echo.get('bytes_recv', 0) + ftp.get('bytes_recv', 0))
-    total_sent = (http.get('bytes_sent', 0) + tcp_echo.get('bytes_sent', 0) +
-                  udp_echo.get('bytes_sent', 0) + ftp.get('bytes_sent', 0))
-    total_reqs = (http.get('requests', 0) + tcp_echo.get('connections', 0) +
-                  udp_echo.get('packets', 0) + ftp.get('downloads', 0) +
+    total_recv = (http.get('bytes_recv', 0) + echo_http.get('bytes_recv', 0) +
+                  echo_dns.get('bytes_recv', 0) + ftp.get('bytes_recv', 0))
+    total_sent = (http.get('bytes_sent', 0) + echo_http.get('bytes_sent', 0) +
+                  echo_dns.get('bytes_sent', 0) + ftp.get('bytes_sent', 0))
+    total_reqs = (http.get('requests', 0) + echo_http.get('requests', 0) +
+                  echo_dns.get('queries', 0) + ftp.get('downloads', 0) +
                   ftp.get('uploads', 0) + ssh.get('sessions', 0))
     total_conns = sum(conn_counts.values())
 
@@ -1391,21 +1391,25 @@ def server_stats():
                 'downloads': http.get('downloads', 0),
             }
         },
-        'TCP Echo': {
+        'HTTP (9999)': {
             'active_connections': conn_counts.get(9999, 0),
             'stats': {
-                'total_connections': tcp_echo.get('connections', 0),
-                'active': tcp_echo.get('active', 0),
-                'bytes_recv': tcp_echo.get('bytes_recv', 0),
-                'bytes_sent': tcp_echo.get('bytes_sent', 0),
+                'requests': echo_http.get('requests', 0),
+                'gets': echo_http.get('gets', 0),
+                'posts': echo_http.get('posts', 0),
+                'active': echo_http.get('active', 0),
+                'bytes_recv': echo_http.get('bytes_recv', 0),
+                'bytes_sent': echo_http.get('bytes_sent', 0),
             }
         },
-        'UDP Echo': {
-            'active_connections': max(conn_counts.get(9998, 0), 1 if (time.time() - udp_echo.get('last_active', 0)) < 10 else 0),
+        'DNS (9998)': {
+            'active_connections': max(conn_counts.get(9998, 0), 1 if (time.time() - echo_dns.get('last_active', 0)) < 10 else 0),
             'stats': {
-                'packets': udp_echo.get('packets', 0),
-                'bytes_recv': udp_echo.get('bytes_recv', 0),
-                'bytes_sent': udp_echo.get('bytes_sent', 0),
+                'queries': echo_dns.get('queries', 0),
+                'forwarded': echo_dns.get('forwarded', 0),
+                'errors': echo_dns.get('errors', 0),
+                'bytes_recv': echo_dns.get('bytes_recv', 0),
+                'bytes_sent': echo_dns.get('bytes_sent', 0),
             }
         },
         'iperf3': {
@@ -1446,8 +1450,8 @@ def server_stats():
 # Map display names to supervisord program names
 SERVICE_PROGRAMS = {
     'HTTP/HTTPS': ['nginx'],
-    'TCP Echo': ['echo_server'],
-    'UDP Echo': ['echo_server'],
+    'HTTP (9999)': ['echo_server'],
+    'DNS (9998)': ['echo_server'],
     'iperf3': ['iperf3_5201', 'iperf3_5202', 'iperf3_5203'],
     'FTP': ['vsftpd'],
     'SSH': ['sshd'],

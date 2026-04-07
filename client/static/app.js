@@ -69,14 +69,15 @@ const PROTOCOLS = {
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
-    tcp: {
-        name: 'TCP',
-        appId: 'unknown-tcp',
+    http_plain: {
+        name: 'HTTP (Plain)',
+        appId: 'web-browsing',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 9999 },
-            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
+            { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
+            { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -87,15 +88,14 @@ const PROTOCOLS = {
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
     },
-    udp: {
-        name: 'UDP',
-        appId: 'unknown-udp',
+    dns: {
+        name: 'DNS',
+        appId: 'dns',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 9998 },
-            { key: 'msg_size', label: 'Msg Size (B)', type: 'number', default: 1024 },
-            { key: 'interval', label: 'Interval (s)', type: 'number', default: 0.5, step: 0.1 },
-            { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com' },
+            { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
