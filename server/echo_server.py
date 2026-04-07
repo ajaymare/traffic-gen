@@ -11,6 +11,7 @@ import signal
 import sys
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 
 STATS_FILE = '/tmp/echo_stats.json'
 stats_lock = threading.Lock()
@@ -101,8 +102,12 @@ class TrafficHTTPHandler(BaseHTTPRequestHandler):
                 stats['http']['active'] -= 1
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+
+
 def http_server(port=9999):
-    server = HTTPServer(('0.0.0.0', port), TrafficHTTPHandler)
+    server = ThreadedHTTPServer(('0.0.0.0', port), TrafficHTTPHandler)
     print(f"[HTTP] Server on port {port}")
     server.serve_forever()
 

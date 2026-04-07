@@ -23,6 +23,7 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 logging.getLogger('paramiko.transport').setLevel(logging.WARNING)
+logging.getLogger('urllib3.connectionpool').setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
 # DSCP name → value mapping
@@ -634,11 +635,13 @@ class TrafficEngine:
                                    banner_timeout=15,
                                    allow_agent=False, look_for_keys=False)
                     transport = client.get_transport()
-                    if transport and tos > 0:
-                        try:
-                            _set_tos(transport.sock, tos)
-                        except Exception:
-                            pass
+                    if transport:
+                        transport.set_keepalive(15)  # send keepalive every 15s
+                        if tos > 0:
+                            try:
+                                _set_tos(transport.sock, tos)
+                            except Exception:
+                                pass
                     job.log(f"SSH connected to {host}:{port}")
                 except Exception as e:
                     job.stats['errors'] += 1
