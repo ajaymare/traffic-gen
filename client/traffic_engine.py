@@ -379,9 +379,10 @@ class TrafficEngine:
                 except Exception as e:
                     job.stats['errors'] += 1
                     job.log(f"HTTP error: {base_url} — {e}")
+                    time.sleep(5)  # back off on errors
 
                 if burst_count == 1:
-                    time.sleep(interval)
+                    time.sleep(max(interval, 1))
             if burst_count > 1:
                 job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
                 time.sleep(burst_pause)
