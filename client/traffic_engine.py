@@ -473,7 +473,7 @@ class TrafficEngine:
     def _run_iperf_full(self, job, proto):
         cfg = job.config
         host = cfg.get('host', 'server')
-        base_port = int(cfg.get('port', 5201))
+        port = int(cfg.get('port', 5201))
         bandwidth = cfg.get('bandwidth', '100M')
         parallel = int(cfg.get('parallel', 1))
         reverse = cfg.get('reverse', False)
@@ -481,25 +481,21 @@ class TrafficEngine:
         tos = _dscp_to_tos(dscp)
         duration = job.duration if job.duration > 0 else 3600
 
-        # Try configured port first, then fall back to other iperf3 ports
-        ports_to_try = [base_port] + [p for p in self.IPERF_PORTS if p != base_port]
+        cmd = ['iperf3', '-c', host, '-p', str(port), '-b', bandwidth,
+               '-t', str(duration), '-P', str(parallel)]
+        if proto == 'udp':
+            cmd.append('-u')
+        if reverse:
+            cmd.append('-R')
+        if tos > 0:
+            cmd.extend(['-S', str(tos)])
 
-        for port in ports_to_try:
-            if job.should_stop():
-                return
+        job.log(f"iperf3 {proto.upper()} → {host}:{port} bw={bandwidth} "
+                f"parallel={parallel} reverse={reverse} duration={duration}s")
 
-            cmd = ['iperf3', '-c', host, '-p', str(port), '-b', bandwidth,
-                   '-t', str(duration), '-P', str(parallel)]
-            if proto == 'udp':
-                cmd.append('-u')
-            if reverse:
-                cmd.append('-R')
-            if tos > 0:
-                cmd.extend(['-S', str(tos)])
-
-            job.log(f"iperf3 {proto.upper()} → {host}:{port} bw={bandwidth} "
-                    f"parallel={parallel} reverse={reverse} duration={duration}s")
-
+        retries = 0
+        max_retries = 5
+        while not job.should_stop():
             try:
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 # Stream stdout lines in real-time for live activity logs
@@ -510,6 +506,7 @@ class TrafficEngine:
                         # Log interval lines (contain transfer stats) and summary
                         if stripped and ('sec' in stripped or 'sender' in stripped or 'receiver' in stripped):
                             job.log(f"iperf3 :{port} | {stripped}")
+                            retries = 0  # reset on successful data
                     else:
                         time.sleep(0.5)
                 if proc.poll() is None:
@@ -519,31 +516,36 @@ class TrafficEngine:
                 remaining = proc.stdout.read()
                 stderr = proc.stderr.read()
 
-                # If server was busy or unreachable, try the next port
-                if proc.returncode != 0 and stderr:
-                    err_lower = stderr.lower()
-                    if any(s in err_lower for s in ['server is busy', 'connection refused',
-                            'unable to connect', 'no route to host', 'server side protocol',
-                            'control socket has closed']):
-                        job.log(f"Port {port} unavailable ({stderr.strip()[:80]}), trying next...")
-                        continue
-
                 if remaining:
                     for line in remaining.split('\n'):
                         stripped = line.strip()
                         if stripped and ('sec' in stripped or 'sender' in stripped or 'receiver' in stripped):
                             job.log(f"iperf3 :{port} | {stripped}")
-                if stderr and proc.returncode != 0:
+
+                # On transient errors, retry same port after brief wait
+                if proc.returncode != 0 and stderr:
+                    err_lower = stderr.lower()
+                    if any(s in err_lower for s in ['server is busy', 'control socket has closed',
+                            'unable to receive parameters', 'server side protocol']):
+                        retries += 1
+                        if retries > max_retries:
+                            job.log(f"iperf3 :{port} — too many retries, giving up")
+                            break
+                        job.log(f"iperf3 :{port} — server busy, retrying in 3s ({retries}/{max_retries})")
+                        time.sleep(3)
+                        continue
+                    elif any(s in err_lower for s in ['connection refused', 'unable to connect', 'no route to host']):
+                        job.log(f"iperf3 :{port} — cannot reach server ({stderr.strip()[:80]})")
+                        break
                     job.log(f"iperf3 :{port} error: {stderr[:300]}")
+
                 job.log(f"iperf3 done on port {port} (exit={proc.returncode})")
-                job.log("Stopped")
-                return
+                break
             except Exception as e:
                 job.stats['errors'] += 1
                 job.log(f"iperf3 error on port {port}: {e}")
+                break
 
-        job.log("All iperf3 ports (5201-5203) unavailable — ensure server container is running")
-        job.stats['errors'] += 1
         job.log("Stopped")
 
 
@@ -628,24 +630,39 @@ class TrafficEngine:
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
         job.log(f"SSH {username}@{host}:{port} cmd='{command}' interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
+        client = None
         while not job.should_stop():
-            for _ in range(burst_count):
-                if job.should_stop():
-                    break
-                client = None
+            # Establish/re-establish persistent connection
+            if client is None:
                 try:
                     client = paramiko.SSHClient()
                     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
                     client.connect(host, port=port, username=username,
                                    password=password, timeout=10,
+                                   banner_timeout=15,
                                    allow_agent=False, look_for_keys=False)
-                    # Set DSCP/TOS on the underlying socket after connection
                     transport = client.get_transport()
                     if transport and tos > 0:
                         try:
                             _set_tos(transport.sock, tos)
                         except Exception:
                             pass
+                    job.log(f"SSH connected to {host}:{port}")
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"SSH connect error: {username}@{host}:{port} — {e}")
+                    client = None
+                    time.sleep(3)
+                    continue
+
+            for _ in range(burst_count):
+                if job.should_stop():
+                    break
+                try:
+                    # Check if transport is still active
+                    transport = client.get_transport()
+                    if not transport or not transport.is_active():
+                        raise EOFError("Connection lost")
                     stdin, stdout, stderr = client.exec_command(command, timeout=10)
                     out = stdout.read().decode().strip()
                     err = stderr.read().decode().strip()
@@ -658,18 +675,25 @@ class TrafficEngine:
                 except Exception as e:
                     job.stats['errors'] += 1
                     job.log(f"SSH error: {username}@{host}:{port} — {e}")
-                finally:
-                    if client:
-                        try:
-                            client.close()
-                        except Exception:
-                            pass
+                    # Close broken connection, will reconnect on next loop
+                    try:
+                        client.close()
+                    except Exception:
+                        pass
+                    client = None
+                    time.sleep(2)
+                    break
                 if burst_count == 1:
                     time.sleep(interval)
             if burst_count > 1:
                 job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
                 time.sleep(burst_pause)
 
+        if client:
+            try:
+                client.close()
+            except Exception:
+                pass
         job.log("Stopped")
 
     # ─── External HTTPS ────────────────────────────────────
