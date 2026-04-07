@@ -280,8 +280,31 @@ _link_sim_state = {
     'cycle_mode': False,
     'phase_remaining': 0,
     'config': {},
+    'logs': [],
 }
 _MARK_BASE = 10  # iptables mark value for per-protocol filtering
+
+
+def _link_sim_log(msg):
+    """Log a link simulation event to both logger and the status log buffer."""
+    ts = time.strftime('%H:%M:%S')
+    entry = f"[{ts}] {msg}"
+    logger.info(f"[LINK SIM] {msg}")
+    with _link_sim_lock:
+        _link_sim_state['logs'].append(entry)
+        # Keep last 100 entries
+        if len(_link_sim_state['logs']) > 100:
+            _link_sim_state['logs'] = _link_sim_state['logs'][-50:]
+
+
+def _fmt_impairment(config):
+    """Format impairment values for display."""
+    parts = []
+    if config.get('latency_ms'): parts.append(f"latency={config['latency_ms']}ms")
+    if config.get('jitter_ms'): parts.append(f"jitter={config['jitter_ms']}ms")
+    if config.get('packet_loss_pct'): parts.append(f"loss={config['packet_loss_pct']}%")
+    if config.get('bandwidth_mbps'): parts.append(f"bw={config['bandwidth_mbps']}Mbps")
+    return ' '.join(parts) if parts else 'none'
 
 
 def _clear_iptables_marks():
@@ -409,6 +432,13 @@ def start_link_simulation(config):
     healthy_dur = max(5, int(config.get('healthy_duration', 30)))
     impaired_dur = max(5, int(config.get('impaired_duration', 30)))
 
+    impairment_str = _fmt_impairment(config)
+    target = config.get('target', 'all')
+    target_str = f"target={target}"
+    if target == 'selected':
+        ports = config.get('ports', [])
+        target_str += f" ports={[p.get('port') for p in ports]}"
+
     with _link_sim_lock:
         _link_sim_running = True
         _link_sim_state.update({
@@ -417,15 +447,20 @@ def start_link_simulation(config):
             'cycle_mode': cycle_mode,
             'phase_remaining': impaired_dur if cycle_mode else 0,
             'config': config,
+            'logs': [],
         })
 
     if cycle_mode:
+        _link_sim_log(f"Started CYCLE MODE — preset={preset_name} {target_str} | healthy={healthy_dur}s impaired={impaired_dur}s | {impairment_str}")
+
         def _cycle_loop():
             global _link_sim_running
-            logger.info(f"Link simulation cycle started: healthy={healthy_dur}s impaired={impaired_dur}s")
+            cycle_num = 0
             while _link_sim_running:
+                cycle_num += 1
                 # Impaired phase
                 _apply_impairment(config)
+                _link_sim_log(f"Cycle #{cycle_num} → IMPAIRED for {impaired_dur}s | {impairment_str}")
                 with _link_sim_lock:
                     _link_sim_state['phase'] = 'impaired'
                     _link_sim_state['phase_remaining'] = impaired_dur
@@ -440,6 +475,7 @@ def start_link_simulation(config):
 
                 # Healthy phase
                 _clear_impairment(config)
+                _link_sim_log(f"Cycle #{cycle_num} → HEALTHY for {healthy_dur}s | no impairment")
                 with _link_sim_lock:
                     _link_sim_state['phase'] = 'healthy'
                     _link_sim_state['phase_remaining'] = healthy_dur
@@ -451,17 +487,17 @@ def start_link_simulation(config):
                     time.sleep(1)
 
             _clear_impairment(config)
+            _link_sim_log("Cycle mode STOPPED — impairment cleared")
             with _link_sim_lock:
                 _link_sim_state.update({'active': False, 'phase': 'idle', 'phase_remaining': 0})
-            logger.info("Link simulation cycle stopped")
 
         _link_sim_thread = threading.Thread(target=_cycle_loop, daemon=True)
         _link_sim_thread.start()
     else:
         # Continuous impairment (no cycling)
         _apply_impairment(config)
+        _link_sim_log(f"Started STATIC mode — preset={preset_name} {target_str} | {impairment_str}")
 
-    logger.info(f"Link simulation started: preset={preset_name} cycle={cycle_mode}")
     return True
 
 
@@ -481,6 +517,7 @@ def stop_link_simulation():
     if was_active:
         config = _link_sim_state.get('config', {})
         _clear_impairment(config)
+        _link_sim_log("Link simulation STOPPED — all impairment cleared")
 
     with _link_sim_lock:
         _link_sim_state.update({
@@ -491,7 +528,6 @@ def stop_link_simulation():
             'config': {},
         })
 
-    logger.info("Link simulation stopped")
     return True
 
 

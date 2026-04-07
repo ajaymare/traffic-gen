@@ -106,6 +106,16 @@ body {
 .proto-select { display: flex; align-items: center; gap: 8px; }
 .proto-checkbox { width: 16px; height: 16px; accent-color: #FA582D; cursor: pointer; }
 .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #1a1a2e; }
+.proto-appid {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 8px;
+    padding: 3px 8px;
+    background: #e8f4fd;
+    border: 1px solid #b3d9f2;
+    border-radius: 4px;
+    display: inline-block;
+}
 .bulk-actions { display: flex; gap: 6px; }
 .proto-badge {
     font-size: 11px;

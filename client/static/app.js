@@ -5,6 +5,7 @@ const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23'
 const PROTOCOLS = {
     https: {
         name: 'HTTPS',
+        appId: 'ssl, web-browsing',
         fields: [
             { key: 'url', label: 'URL', type: 'text', get default() { return `https://${SRV}/`; } },
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST'], default: 'GET' },
@@ -25,6 +26,7 @@ const PROTOCOLS = {
     },
     iperf_tcp: {
         name: 'iperf3 TCP',
+        appId: 'iperf',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 5201 },
@@ -38,6 +40,7 @@ const PROTOCOLS = {
     },
     iperf_udp: {
         name: 'iperf3 UDP',
+        appId: 'iperf',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 5201 },
@@ -51,6 +54,7 @@ const PROTOCOLS = {
     },
     hping3: {
         name: 'hping3',
+        appId: 'ping, ip-protocol-custom',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'mode', label: 'Mode', type: 'select', options: ['ICMP', 'TCP SYN', 'TCP ACK', 'TCP FIN', 'UDP', 'Traceroute'], default: 'ICMP' },
@@ -67,6 +71,7 @@ const PROTOCOLS = {
     },
     tcp: {
         name: 'TCP',
+        appId: 'unknown-tcp',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 9999 },
@@ -84,6 +89,7 @@ const PROTOCOLS = {
     },
     udp: {
         name: 'UDP',
+        appId: 'unknown-udp',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 9998 },
@@ -101,12 +107,13 @@ const PROTOCOLS = {
     },
     ftp: {
         name: 'FTP',
+        appId: 'ftp',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 21 },
             { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
             { key: 'password', label: 'Password', type: 'password', default: '' },
-            { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin', 'testfile_1gb.bin'], default: 'testfile_1gb.bin' },
+            { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -119,6 +126,7 @@ const PROTOCOLS = {
     },
     ssh: {
         name: 'SSH',
+        appId: 'ssh',
         fields: [
             { key: 'host', label: 'Host', type: 'text', get default() { return SRV; } },
             { key: 'port', label: 'Port', type: 'number', default: 2222 },
@@ -137,6 +145,7 @@ const PROTOCOLS = {
     },
     ext_https: {
         name: 'External HTTPS',
+        appId: 'ssl, web-browsing',
         fields: [
             { key: 'urls', label: 'Target URLs (one per line)', type: 'textarea', default: 'https://www.google.com' },
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'HEAD'], default: 'GET' },
@@ -179,6 +188,8 @@ function renderProtocolCards() {
             fieldsHtml += `<div class="field-row"><label>${f.label}</label>${input}</div>`;
         }
 
+        const appIdHtml = def.appId ? `<div class="proto-appid">App-ID: ${def.appId}</div>` : '';
+
         grid.innerHTML += `
             <div class="proto-card" id="proto-${proto}">
                 <div class="proto-header">
@@ -191,6 +202,7 @@ function renderProtocolCards() {
                         <span class="proto-badge countdown" id="timer-${proto}" style="display:none"></span>
                     </span>
                 </div>
+                ${appIdHtml}
                 <div class="proto-fields">${fieldsHtml}</div>
                 <div class="proto-actions">
                     <button class="btn btn-start" onclick="startProto('${proto}')">Start</button>
@@ -424,6 +436,17 @@ async function pollLinkSimStatus() {
         } else {
             statusEl.style.display = 'none';
         }
+        // Merge link sim logs into activity log
+        if (data.logs) {
+            for (const line of data.logs) {
+                const key = 'linksim:' + line;
+                if (!_seenEngineLogs.has(key)) {
+                    _seenEngineLogs.add(key);
+                    logBuf.push('[LINK SIM] ' + line);
+                }
+            }
+            renderLogPanel();
+        }
     } catch (e) { /* ignore */ }
 }
 
@@ -570,8 +593,9 @@ function toggleAutoRefresh() {
     const enabled = document.getElementById('auto-refresh-toggle').checked;
     if (enabled) {
         if (!autoRefreshInterval) {
-            autoRefreshInterval = setInterval(pollStatus, 2000);
+            autoRefreshInterval = setInterval(() => { pollStatus(); pollLinkSimStatus(); }, 2000);
             pollStatus();
+            pollLinkSimStatus();
         }
     } else {
         if (autoRefreshInterval) {
