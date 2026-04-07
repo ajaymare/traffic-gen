@@ -22,6 +22,7 @@ import paramiko
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+logging.getLogger('paramiko.transport').setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # DSCP name → value mapping
@@ -345,9 +346,8 @@ class TrafficEngine:
         job.log(f"HTTP {method} {base_url} data_size={data_size_kb}KB interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
 
         session = requests.Session()
-        if tos > 0:
-            adapter = DscpHTTPAdapter(tos=tos)
-            session.mount('http://', adapter)
+        adapter = DscpHTTPAdapter(tos=tos, max_retries=3)
+        session.mount('http://', adapter)
 
         while not job.should_stop():
             for _ in range(burst_count):
@@ -394,7 +394,9 @@ class TrafficEngine:
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 9998))
         domains_raw = cfg.get('domains', 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com')
-        domains = [d.strip() for d in domains_raw.replace(',', '\n').split('\n') if d.strip()]
+        # Handle literal \n from textarea, commas, and real newlines
+        domains_raw = domains_raw.replace('\\n', '\n').replace(',', '\n')
+        domains = [d.strip() for d in domains_raw.split('\n') if d.strip()]
         if not domains:
             domains = ['google.com']
         interval, burst_count, burst_pause = self._get_timing(cfg)

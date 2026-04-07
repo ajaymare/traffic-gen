@@ -107,20 +107,99 @@ def http_server(port=9999):
     server.serve_forever()
 
 
-# ─── DNS Forwarder (port 9998) ───────────────────────────────
+# ─── DNS Server (port 9998) ──────────────────────────────────
 
-UPSTREAM_DNS = '8.8.8.8'
-UPSTREAM_DNS_PORT = 53
+# Static DNS records — resolved locally without external connectivity
+STATIC_DNS = {
+    'google.com': '142.250.80.46',
+    'www.google.com': '142.250.80.46',
+    'amazon.com': '205.251.242.103',
+    'www.amazon.com': '205.251.242.103',
+    'microsoft.com': '20.70.246.20',
+    'www.microsoft.com': '20.70.246.20',
+    'github.com': '140.82.121.3',
+    'www.github.com': '140.82.121.3',
+    'cloudflare.com': '104.16.132.229',
+    'www.cloudflare.com': '104.16.132.229',
+    'facebook.com': '157.240.1.35',
+    'www.facebook.com': '157.240.1.35',
+    'apple.com': '17.253.144.10',
+    'www.apple.com': '17.253.144.10',
+    'netflix.com': '54.74.73.31',
+    'www.netflix.com': '54.74.73.31',
+    'twitter.com': '104.244.42.193',
+    'www.twitter.com': '104.244.42.193',
+    'linkedin.com': '13.107.42.14',
+    'www.linkedin.com': '13.107.42.14',
+    'yahoo.com': '74.6.231.21',
+    'www.yahoo.com': '74.6.231.21',
+    'wikipedia.org': '208.80.154.224',
+    'www.wikipedia.org': '208.80.154.224',
+    'reddit.com': '151.101.1.140',
+    'www.reddit.com': '151.101.1.140',
+    'stackoverflow.com': '151.101.1.69',
+    'www.stackoverflow.com': '151.101.1.69',
+    'traffic-server': '127.0.0.1',
+    'server': '127.0.0.1',
+}
+
+# Default IP for unknown domains
+DEFAULT_IP = '10.0.0.1'
 
 
-def dns_forwarder(port=9998):
-    """Forward DNS queries to upstream resolver.
-    Receives standard DNS query packets, forwards to 8.8.8.8, returns response.
+def _parse_dns_name(data, offset):
+    """Parse a DNS name from a packet, handling compression pointers."""
+    labels = []
+    while offset < len(data):
+        length = data[offset]
+        if length == 0:
+            offset += 1
+            break
+        if (length & 0xC0) == 0xC0:  # compression pointer
+            ptr = struct.unpack('!H', data[offset:offset+2])[0] & 0x3FFF
+            sub_name, _ = _parse_dns_name(data, ptr)
+            labels.append(sub_name)
+            offset += 2
+            return '.'.join(labels), offset
+        offset += 1
+        labels.append(data[offset:offset+length].decode('ascii', errors='ignore'))
+        offset += length
+    return '.'.join(labels), offset
+
+
+def _build_dns_response(query, domain, ip):
+    """Build a DNS A-record response for the given query."""
+    # Copy transaction ID and set response flags
+    txn_id = query[:2]
+    flags = struct.pack('!H', 0x8180)  # response, authoritative, recursion available
+    qdcount = struct.pack('!H', 1)
+    ancount = struct.pack('!H', 1)
+    nscount = struct.pack('!H', 0)
+    arcount = struct.pack('!H', 0)
+    header = txn_id + flags + qdcount + ancount + nscount + arcount
+
+    # Rebuild question section
+    qname = b''
+    for label in domain.split('.'):
+        qname += bytes([len(label)]) + label.encode('ascii')
+    qname += b'\x00'
+    question = qname + struct.pack('!HH', 1, 1)  # QTYPE=A, QCLASS=IN
+
+    # Answer section — pointer to qname + A record
+    answer = struct.pack('!HHHLH', 0xC00C, 1, 1, 300, 4)  # name pointer, A, IN, TTL=300, RDLENGTH=4
+    answer += socket.inet_aton(ip)
+
+    return header + question + answer
+
+
+def dns_server(port=9998):
+    """Local DNS server with static records.
+    Resolves queries from static table — no external connectivity needed.
     """
     srv = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(('0.0.0.0', port))
-    print(f"[DNS] Forwarder on port {port} → {UPSTREAM_DNS}:{UPSTREAM_DNS_PORT}")
+    print(f"[DNS] Server on port {port} — {len(STATIC_DNS)} static records")
 
     while True:
         try:
@@ -130,21 +209,23 @@ def dns_forwarder(port=9998):
                 stats['dns']['bytes_recv'] += len(data)
                 stats['dns']['last_active'] = time.time()
 
-            # Forward to upstream DNS
-            fwd_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            fwd_sock.settimeout(5)
-            try:
-                fwd_sock.sendto(data, (UPSTREAM_DNS, UPSTREAM_DNS_PORT))
-                response, _ = fwd_sock.recvfrom(4096)
-                srv.sendto(response, client_addr)
-                with stats_lock:
-                    stats['dns']['bytes_sent'] += len(response)
-                    stats['dns']['forwarded'] += 1
-            except socket.timeout:
-                with stats_lock:
-                    stats['dns']['errors'] += 1
-            finally:
-                fwd_sock.close()
+            # Parse query — extract domain name
+            if len(data) < 12:
+                continue
+            domain, _ = _parse_dns_name(data, 12)
+            domain_lower = domain.lower()
+
+            # Look up in static records
+            ip = STATIC_DNS.get(domain_lower, DEFAULT_IP)
+
+            # Build and send response
+            response = _build_dns_response(data, domain, ip)
+            srv.sendto(response, client_addr)
+
+            with stats_lock:
+                stats['dns']['bytes_sent'] += len(response)
+                stats['dns']['forwarded'] += 1
+
         except Exception:
             with stats_lock:
                 stats['dns']['errors'] += 1
@@ -164,6 +245,6 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     threading.Thread(target=save_stats, daemon=True).start()
     threading.Thread(target=http_server, daemon=True).start()
-    threading.Thread(target=dns_forwarder, daemon=True).start()
+    threading.Thread(target=dns_server, daemon=True).start()
     print("[NET] HTTP + DNS servers started")
     threading.Event().wait()
