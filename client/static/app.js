@@ -375,16 +375,51 @@ async function pollLinkSimStatus() {
         const statusEl = document.getElementById('link-sim-status');
         const phaseEl = document.getElementById('link-sim-phase');
         const countdownEl = document.getElementById('link-sim-countdown');
+        const indicatorEl = document.getElementById('link-sim-indicator');
+        const appliedEl = document.getElementById('link-sim-applied');
         if (data.active) {
             statusEl.style.display = 'block';
             const phase = data.phase || 'idle';
             phaseEl.textContent = phase.toUpperCase();
-            phaseEl.style.color = phase === 'impaired' ? '#e74c3c' : phase === 'healthy' ? '#27ae60' : '#888';
+            if (phase === 'impaired') {
+                phaseEl.style.color = '#c0392b';
+                statusEl.style.background = '#fdecea';
+                statusEl.style.borderColor = '#e74c3c';
+                indicatorEl.style.background = '#e74c3c';
+            } else if (phase === 'healthy') {
+                phaseEl.style.color = '#1e8449';
+                statusEl.style.background = '#eafaf1';
+                statusEl.style.borderColor = '#27ae60';
+                indicatorEl.style.background = '#27ae60';
+            } else {
+                phaseEl.style.color = '#888';
+                statusEl.style.background = '#f0f2f5';
+                statusEl.style.borderColor = '#ccc';
+                indicatorEl.style.background = '#888';
+            }
             if (data.cycle_mode && data.phase_remaining > 0) {
                 const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
-                countdownEl.textContent = `(Next: ${next} in ${data.phase_remaining}s)`;
+                const rem = Math.round(data.phase_remaining);
+                countdownEl.textContent = `(Next: ${next} in ${rem}s)`;
+            } else if (data.cycle_mode) {
+                countdownEl.textContent = '(Cycling)';
             } else {
-                countdownEl.textContent = '';
+                countdownEl.textContent = '(Static — no cycling)';
+            }
+            // Show current impairment values
+            const cfg = data.config || {};
+            const parts = [];
+            if (phase === 'impaired') {
+                if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
+                if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
+                if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
+                if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
+                if (cfg.packet_loss_pct >= 100) parts.length = 0, parts.push('LINK DOWN — 100% packet loss');
+                appliedEl.textContent = parts.length ? 'Applied: ' + parts.join(' | ') : '';
+            } else if (phase === 'healthy') {
+                appliedEl.textContent = 'No impairment — traffic flowing normally';
+            } else {
+                appliedEl.textContent = '';
             }
         } else {
             statusEl.style.display = 'none';

@@ -1,6 +1,7 @@
 """Traffic Generator Client — Flask Web UI + REST API."""
 import os
 import logging
+import subprocess
 from flask import Flask, render_template, jsonify, request
 
 from traffic_engine import TrafficEngine
@@ -139,6 +140,15 @@ def interface():
         iface = d.get('interface', '').strip()
         if not iface:
             return jsonify({"error": "interface required"}), 400
+        # Validate interface exists inside the container
+        try:
+            result = subprocess.run(
+                ['ip', 'link', 'show', iface],
+                capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                return jsonify({"error": f"Interface '{iface}' not found in container. Use 'ip link' inside the container to see available interfaces."}), 400
+        except Exception:
+            pass
         network_shaper.INTERFACE = iface
         return jsonify({"ok": True, "interface": iface,
                         "message": f"Interface changed to {iface}"})

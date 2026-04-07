@@ -630,9 +630,14 @@ async function renderClientTab(name) {
         'Interface: <strong id="c-' + name + '-interface-name">detecting...</strong>' +
         '<button class="btn btn-secondary" onclick="clientChangeInterface(\'' + name + '\')" style="margin-left:8px;padding:2px 10px;font-size:11px">Change</button></div>' +
         // Status
-        '<div id="c-' + name + '-link-sim-status" style="margin-bottom:12px;padding:8px 12px;background:#f0f2f5;border-radius:8px;font-size:13px;display:none">' +
-        'Status: <span id="c-' + name + '-link-sim-phase" style="font-weight:600">idle</span>' +
-        '<span id="c-' + name + '-link-sim-countdown" style="margin-left:8px;color:#888"></span></div>' +
+        '<div id="c-' + name + '-link-sim-status" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;font-size:13px;display:none;border:2px solid #ccc">' +
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<span id="c-' + name + '-link-sim-indicator" style="width:12px;height:12px;border-radius:50%;display:inline-block"></span>' +
+        '<strong>Link Simulation Active</strong>' +
+        '<span style="font-size:12px">—</span>' +
+        '<span>Phase: <span id="c-' + name + '-link-sim-phase" style="font-weight:700;font-size:14px">idle</span></span>' +
+        '<span id="c-' + name + '-link-sim-countdown" style="color:#555;font-size:12px"></span></div>' +
+        '<div id="c-' + name + '-link-sim-applied" style="margin-top:6px;font-size:12px;color:#444"></div></div>' +
         // Actions
         '<div class="shaping-actions">' +
         '<button class="btn btn-start" onclick="clientStartLinkSim(\'' + name + '\')">Start</button>' +
@@ -814,17 +819,53 @@ async function clientPollLinkSimStatus(clientName) {
         const statusEl = document.getElementById('c-' + clientName + '-link-sim-status');
         const phaseEl = document.getElementById('c-' + clientName + '-link-sim-phase');
         const countdownEl = document.getElementById('c-' + clientName + '-link-sim-countdown');
+        const indicatorEl = document.getElementById('c-' + clientName + '-link-sim-indicator');
+        const appliedEl = document.getElementById('c-' + clientName + '-link-sim-applied');
         if (!statusEl) return;
         if (data.active) {
             statusEl.style.display = 'block';
             const phase = data.phase || 'idle';
             phaseEl.textContent = phase.toUpperCase();
-            phaseEl.style.color = phase === 'impaired' ? '#e74c3c' : phase === 'healthy' ? '#27ae60' : '#888';
+            if (phase === 'impaired') {
+                phaseEl.style.color = '#c0392b';
+                statusEl.style.background = '#fdecea';
+                statusEl.style.borderColor = '#e74c3c';
+                if (indicatorEl) indicatorEl.style.background = '#e74c3c';
+            } else if (phase === 'healthy') {
+                phaseEl.style.color = '#1e8449';
+                statusEl.style.background = '#eafaf1';
+                statusEl.style.borderColor = '#27ae60';
+                if (indicatorEl) indicatorEl.style.background = '#27ae60';
+            } else {
+                phaseEl.style.color = '#888';
+                statusEl.style.background = '#f0f2f5';
+                statusEl.style.borderColor = '#ccc';
+                if (indicatorEl) indicatorEl.style.background = '#888';
+            }
             if (data.cycle_mode && data.phase_remaining > 0) {
                 const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
-                countdownEl.textContent = '(Next: ' + next + ' in ' + data.phase_remaining + 's)';
+                const rem = Math.round(data.phase_remaining);
+                countdownEl.textContent = '(Next: ' + next + ' in ' + rem + 's)';
+            } else if (data.cycle_mode) {
+                countdownEl.textContent = '(Cycling)';
             } else {
-                countdownEl.textContent = '';
+                countdownEl.textContent = '(Static — no cycling)';
+            }
+            const cfg = data.config || {};
+            if (appliedEl) {
+                const parts = [];
+                if (phase === 'impaired') {
+                    if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
+                    if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
+                    if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
+                    if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
+                    if (cfg.packet_loss_pct >= 100) { parts.length = 0; parts.push('LINK DOWN — 100% packet loss'); }
+                    appliedEl.textContent = parts.length ? 'Applied: ' + parts.join(' | ') : '';
+                } else if (phase === 'healthy') {
+                    appliedEl.textContent = 'No impairment — traffic flowing normally';
+                } else {
+                    appliedEl.textContent = '';
+                }
             }
         } else {
             statusEl.style.display = 'none';
