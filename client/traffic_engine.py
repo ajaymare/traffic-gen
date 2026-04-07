@@ -598,15 +598,16 @@ class TrafficEngine:
             for _ in range(burst_count):
                 if job.should_stop():
                     break
-                sock = None
                 client = None
                 try:
+                    # Create socket with DSCP/TOS marking
                     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.settimeout(10)
                     _set_tos(sock, tos)
                     sock.connect((host, port))
                     client = paramiko.SSHClient()
                     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+                    # Pass sock to paramiko — paramiko takes ownership and closes it
                     client.connect(host, port=port, username=username,
                                    password=password, timeout=10,
                                    allow_agent=False, look_for_keys=False,
@@ -627,11 +628,6 @@ class TrafficEngine:
                     if client:
                         try:
                             client.close()
-                        except Exception:
-                            pass
-                    elif sock:
-                        try:
-                            sock.close()
                         except Exception:
                             pass
                 if burst_count == 1:

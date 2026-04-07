@@ -521,26 +521,24 @@ async function pollStatus() {
         document.getElementById('stat-reqs').textContent = totReqs.toLocaleString();
         document.getElementById('stat-errors').textContent = totErrs.toLocaleString();
 
-        // Render activity logs from traffic engine
-        let allLogs = [];
+        // Merge engine logs into the unified log buffer
         for (const [proto, info] of Object.entries(data.jobs)) {
             if (info.logs) {
                 for (const line of info.logs) {
-                    allLogs.push('[' + proto.toUpperCase() + '] ' + line);
+                    const key = proto + ':' + line;
+                    if (!_seenEngineLogs.has(key)) {
+                        _seenEngineLogs.add(key);
+                        logBuf.push('[' + proto.toUpperCase() + '] ' + line);
+                    }
                 }
             }
         }
-        if (allLogs.length > 0) {
-            const panel = document.getElementById('log-panel');
-            const last100 = allLogs.slice(-100);
-            panel.innerHTML = last100.map(l => {
-                const cls = l.toLowerCase().includes('error') ? ' error' : '';
-                const d = document.createElement('div');
-                d.textContent = l;
-                return `<div class="log-entry${cls}">${d.innerHTML}</div>`;
-            }).join('');
-            panel.scrollTop = panel.scrollHeight;
+        // Cap dedup set to prevent memory growth
+        if (_seenEngineLogs.size > 5000) {
+            const arr = Array.from(_seenEngineLogs);
+            _seenEngineLogs = new Set(arr.slice(arr.length - 2000));
         }
+        renderLogPanel();
     } catch (e) { /* ignore */ }
 }
 
@@ -548,18 +546,24 @@ async function pollStatus() {
 
 const logBuf = [];
 let autoRefreshInterval = null;
+let _seenEngineLogs = new Set();
 
-function addLog(msg) {
-    logBuf.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-    if (logBuf.length > 1000) logBuf.splice(0, 500);
+function renderLogPanel() {
+    if (logBuf.length > 1000) logBuf.splice(0, logBuf.length - 500);
     const panel = document.getElementById('log-panel');
-    panel.innerHTML = logBuf.map(l => {
+    const last150 = logBuf.slice(-150);
+    panel.innerHTML = last150.map(l => {
         const cls = l.toLowerCase().includes('error') ? ' error' : '';
         const d = document.createElement('div');
         d.textContent = l;
         return `<div class="log-entry${cls}">${d.innerHTML}</div>`;
     }).join('');
     panel.scrollTop = panel.scrollHeight;
+}
+
+function addLog(msg) {
+    logBuf.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
+    renderLogPanel();
 }
 
 function toggleAutoRefresh() {
