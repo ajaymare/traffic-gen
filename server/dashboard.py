@@ -633,15 +633,6 @@ async function renderClientTab(name) {
         '<label style="font-size:12px">Healthy</label><input type="number" id="c-' + name + '-link-healthy-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
         '<label style="font-size:12px;margin-left:8px">Impaired</label><input type="number" id="c-' + name + '-link-impaired-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
         '</div></div></div>' +
-        // Sudo Authentication
-        '<div id="c-' + name + '-sudo-auth-section" style="margin-bottom:12px;padding:10px;background:#fff3e0;border:1px solid #ffcc80;border-radius:8px">' +
-        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
-        '<span id="c-' + name + '-sudo-auth-icon" style="font-size:14px">&#128274;</span>' +
-        '<strong style="font-size:13px">Sudo Authentication</strong>' +
-        '<span id="c-' + name + '-sudo-auth-status" style="font-size:12px;color:#888">Not authenticated</span>' +
-        '<input type="password" id="c-' + name + '-sudo-password" placeholder="Sudo password" style="width:160px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<button class="btn btn-primary" id="c-' + name + '-sudo-auth-btn" onclick="clientAuthenticateSudo(\'' + name + '\')" style="padding:4px 12px;font-size:12px">Authenticate</button>' +
-        '</div></div>' +
         // Interface
         '<div style="margin-bottom:12px;padding:8px 12px;background:#f0f2f5;border-radius:8px;font-size:13px">' +
         'Interface: <strong id="c-' + name + '-interface-name">detecting...</strong>' +
@@ -887,54 +878,6 @@ async function clientPollLinkSimStatus(clientName) {
         } else {
             statusEl.style.display = 'none';
         }
-    } catch(e) {}
-}
-
-async function clientAuthenticateSudo(clientName) {
-    const pw = document.getElementById('c-' + clientName + '-sudo-password').value;
-    if (!pw) { addClientLog(clientName, '[SUDO] Password required'); return; }
-    const res = await apiPost('/api/client/' + clientName + '/sudo', { password: pw });
-    if (res.authenticated) {
-        document.getElementById('c-' + clientName + '-sudo-password').value = '';
-        clientUpdateSudoStatus(clientName, true);
-        addClientLog(clientName, '[SUDO] Authenticated successfully');
-    } else {
-        addClientLog(clientName, '[SUDO] Authentication failed — invalid password');
-        clientUpdateSudoStatus(clientName, false);
-    }
-}
-
-function clientUpdateSudoStatus(clientName, authenticated) {
-    const section = document.getElementById('c-' + clientName + '-sudo-auth-section');
-    const status = document.getElementById('c-' + clientName + '-sudo-auth-status');
-    const icon = document.getElementById('c-' + clientName + '-sudo-auth-icon');
-    const pwInput = document.getElementById('c-' + clientName + '-sudo-password');
-    const btn = document.getElementById('c-' + clientName + '-sudo-auth-btn');
-    if (!section) return;
-    if (authenticated) {
-        section.style.background = '#e8f5e9';
-        section.style.borderColor = '#81c784';
-        status.textContent = 'Authenticated';
-        status.style.color = '#2e7d32';
-        icon.innerHTML = '&#128275;';
-        pwInput.style.display = 'none';
-        btn.style.display = 'none';
-    } else {
-        section.style.background = '#fff3e0';
-        section.style.borderColor = '#ffcc80';
-        status.textContent = 'Not authenticated';
-        status.style.color = '#888';
-        icon.innerHTML = '&#128274;';
-        pwInput.style.display = '';
-        btn.style.display = '';
-    }
-}
-
-async function clientLoadSudoStatus(clientName) {
-    try {
-        const resp = await fetch('/api/client/' + clientName + '/sudo');
-        const data = await resp.json();
-        clientUpdateSudoStatus(clientName, data.authenticated);
     } catch(e) {}
 }
 
@@ -1234,7 +1177,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadSudoStatus(name); clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
+        clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
         switchTab(name);
     }
 }
@@ -1257,7 +1200,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadSudoStatus(name); clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
+            clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1560,13 +1503,9 @@ def client_server_host(name):
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/sudo', methods=['GET', 'POST'])
-def client_sudo(name):
-    if request.method == 'POST':
-        result, code = proxy_to_client(name, '/api/sudo', 'POST', request.json or {})
-    else:
-        result, code = proxy_to_client(name, '/api/sudo')
-    return jsonify(result), code
+@app.route('/api/client/<name>/sudo', methods=['GET'])
+def client_sudo(name):  # noqa: ARG001
+    return jsonify({"authenticated": True})
 
 
 @app.route('/api/client/<name>/interface', methods=['GET', 'POST'])

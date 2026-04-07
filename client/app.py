@@ -63,21 +63,9 @@ def stop_traffic():
     return jsonify({"ok": ok, "message": msg}), 200 if ok else 404
 
 
-@app.route('/api/sudo', methods=['GET', 'POST'])
+@app.route('/api/sudo', methods=['GET'])
 def sudo_auth():
-    if request.method == 'POST':
-        d = _get_json()
-        password = d.get('password', '')
-        if not password:
-            return jsonify({"error": "password required"}), 400
-        if network_shaper.verify_sudo_password(password):
-            network_shaper.set_sudo_password(password)
-            return jsonify({"ok": True, "authenticated": True,
-                            "message": "Sudo authenticated"})
-        else:
-            return jsonify({"ok": False, "authenticated": False,
-                            "message": "Invalid sudo password"}), 401
-    return jsonify({"authenticated": network_shaper.get_sudo_authenticated()})
+    return jsonify({"authenticated": True})
 
 
 @app.route('/api/link-simulation/start', methods=['POST'])
@@ -98,8 +86,6 @@ def start_link_sim():
         }
     except (ValueError, TypeError):
         return jsonify({"error": "Invalid parameters"}), 400
-    if not network_shaper.get_sudo_authenticated():
-        return jsonify({"ok": False, "error": "Sudo password required — authenticate first"}), 403
     network_shaper.start_link_simulation(config)
     return jsonify({"ok": True, "message": "Link simulation started"})
 

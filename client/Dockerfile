@@ -4,12 +4,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 iptables iputils-ping iperf3 hping3 curl nginx openssl supervisor sudo openssh-client sshpass \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user with sudo access for network commands (tc, iptables, ip)
-# Default password: trafficgen (override with SUDO_PASSWORD env var at runtime)
-ARG SUDO_PASSWORD=trafficgen
+# Create non-root user with passwordless sudo for network commands
 RUN useradd -m -s /bin/bash appuser && \
-    echo "appuser:${SUDO_PASSWORD}" | chpasswd && \
-    echo 'appuser ALL=(root) PASSWD: /sbin/tc, /usr/sbin/tc, /sbin/iptables, /usr/sbin/iptables, /sbin/ip, /usr/sbin/ip, /usr/sbin/hping3' > /etc/sudoers.d/appuser && \
+    echo 'appuser ALL=(root) NOPASSWD: /sbin/tc, /usr/sbin/tc, /sbin/iptables, /usr/sbin/iptables, /sbin/ip, /usr/sbin/ip, /usr/sbin/hping3' > /etc/sudoers.d/appuser && \
     chmod 0440 /etc/sudoers.d/appuser
 
 # Generate self-signed SSL cert for dashboard HTTPS

@@ -20,36 +20,16 @@ _random_bw_lock = threading.Lock()
 # Track last applied settings so the API can return them accurately
 _last_shaping = {"latency_ms": 0, "jitter_ms": 0, "packet_loss_pct": 0, "bandwidth_mbps": 0}
 
-# Sudo password for privileged commands (tc, iptables, ip)
-_sudo_password = None
+# Sudo authentication state (NOPASSWD configured in container)
+_sudo_authenticated = True  # Auto-authenticated with NOPASSWD
 _sudo_lock = threading.Lock()
 # Commands that require sudo
 _SUDO_COMMANDS = {'tc', 'iptables', 'ip'}
 
 
-def set_sudo_password(password):
-    """Store the sudo password for privileged commands."""
-    global _sudo_password
-    with _sudo_lock:
-        _sudo_password = password
-    logger.info("Sudo password updated")
-
-
 def get_sudo_authenticated():
-    """Check if sudo password has been set."""
-    with _sudo_lock:
-        return _sudo_password is not None
-
-
-def verify_sudo_password(password):
-    """Verify sudo password by running a test command."""
-    try:
-        proc = subprocess.run(
-            ['sudo', '-S', '-v'],
-            input=password + '\n', capture_output=True, text=True, timeout=5)
-        return proc.returncode == 0
-    except Exception:
-        return False
+    """Check if sudo is available. Always True with NOPASSWD."""
+    return True
 
 
 def _detect_interface():
@@ -134,19 +114,13 @@ def _needs_sudo(cmd):
 
 
 def _run(cmd):
-    """Run a command as a list (no shell). Uses sudo for privileged commands."""
+    """Run a command as a list (no shell). Uses sudo (NOPASSWD) for privileged commands."""
     needs_sudo = _needs_sudo(cmd)
     if needs_sudo:
-        with _sudo_lock:
-            password = _sudo_password
-        if password is None:
-            logger.warning(f"Sudo password not set, cannot run: {cmd[0]}")
-            return False, "Sudo password not set — authenticate first"
-        sudo_cmd = ['sudo', '-S'] + cmd
+        sudo_cmd = ['sudo'] + cmd
         logger.info(f"cmd: sudo {cmd}")
         try:
-            result = subprocess.run(sudo_cmd, input=password + '\n',
-                                    capture_output=True, text=True, timeout=30)
+            result = subprocess.run(sudo_cmd, capture_output=True, text=True, timeout=30)
         except FileNotFoundError:
             logger.warning(f"cmd not found: {cmd[0]}")
             return False, f"{cmd[0]}: command not found"
@@ -162,9 +136,6 @@ def _run(cmd):
             return False, f"{cmd[0]}: command not found"
     if result.returncode != 0:
         stderr = result.stderr.strip()
-        # Filter out sudo password prompt from error output
-        stderr_lines = [l for l in stderr.split('\n') if not l.startswith('[sudo]')]
-        stderr = '\n'.join(stderr_lines).strip()
         if stderr:
             logger.warning(f"cmd failed: {stderr}")
     return result.returncode == 0, result.stdout + result.stderr

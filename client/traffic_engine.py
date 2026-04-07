@@ -737,17 +737,8 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
-        # hping3 requires raw sockets — must run via sudo
-        import network_shaper
-        sudo_pw = None
-        with network_shaper._sudo_lock:
-            sudo_pw = network_shaper._sudo_password
-        if not sudo_pw:
-            job.log("hping3 requires sudo — authenticate first in Link Simulation")
-            job.stats['errors'] += 1
-            return
-
-        cmd = ['sudo', '-S', 'hping3', host, '--ttl', str(ttl), '-d', str(packet_size)]
+        # hping3 requires raw sockets — run via sudo (NOPASSWD configured)
+        cmd = ['sudo', 'hping3', host, '--ttl', str(ttl), '-d', str(packet_size)]
 
         # Mode flags
         mode_map = {
@@ -778,14 +769,12 @@ class TrafficEngine:
                 f"flood={flood} DSCP={dscp}(TOS={tos})")
 
         try:
-            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            proc.stdin.write(sudo_pw + '\n')
-            proc.stdin.flush()
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             while not job.should_stop() and proc.poll() is None:
                 line = proc.stdout.readline()
                 if line:
                     stripped = line.strip()
-                    if stripped and '[sudo]' not in stripped:
+                    if stripped:
                         job.stats['requests'] += 1
                         job.stats['bytes_sent'] += packet_size
                         if 'rtt=' in stripped or 'flags=' in stripped or 'ip=' in stripped:
@@ -800,7 +789,7 @@ class TrafficEngine:
             remaining = proc.stdout.read()
             if remaining:
                 for line in remaining.strip().split('\n'):
-                    if line.strip() and '[sudo]' not in line:
+                    if line.strip():
                         job.log(f"hping3 {host} → {line.strip()}")
         except Exception as e:
             job.stats['errors'] += 1
