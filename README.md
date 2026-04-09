@@ -151,7 +151,7 @@ docker run -d --name traffic-server \
   -p 8082:8082 \
   -p 8443:8443 \
   --restart unless-stopped \
-  ajaymare/traffic-gen-server:latest
+  ajaymare/traffic-server:latest
 ```
 
 **Client VM:**
@@ -163,7 +163,7 @@ docker run -d --name traffic-client \
   -p 8443:8443 \
   -e SERVER_HOST=<server-vm-ip> \
   --restart unless-stopped \
-  ajaymare/traffic-gen-client:latest
+  ajaymare/traffic-client:latest
 ```
 
 - Client dashboard: `https://<client-vm-ip>:8443` (or `http://<client-vm-ip>:8080`)
@@ -188,7 +188,7 @@ docker run -d --name traffic-server \
   -p 8082:8082 \
   -p 18443:8443 \
   --restart unless-stopped \
-  ajaymare/traffic-gen-server:latest
+  ajaymare/traffic-server:latest
 
 # Start client (points to server container by name)
 docker run -d --name traffic-client \
@@ -198,7 +198,7 @@ docker run -d --name traffic-client \
   -p 8443:8443 \
   -e SERVER_HOST=traffic-server \
   --restart unless-stopped \
-  ajaymare/traffic-gen-client:latest
+  ajaymare/traffic-client:latest
 ```
 
 - Client dashboard: `https://<server-ip>:8443` (or `http://<server-ip>:8080`)
