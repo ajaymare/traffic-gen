@@ -28,10 +28,23 @@ http_stats = _load_stats()
 # Batch stats saves on a timer instead of per-request
 _stats_dirty = False
 
+RESET_SIGNAL = '/tmp/stats_reset_http'
+
+
 def _stats_save_loop():
     global _stats_dirty
     while True:
         time.sleep(2)
+        # Check for reset signal
+        if os.path.exists(RESET_SIGNAL):
+            with stats_lock:
+                for k in http_stats:
+                    http_stats[k] = 0
+                _stats_dirty = True
+            try:
+                os.remove(RESET_SIGNAL)
+            except OSError:
+                pass
         if _stats_dirty:
             with stats_lock:
                 _stats_dirty = False

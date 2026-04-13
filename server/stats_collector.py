@@ -113,6 +113,24 @@ def save_stats():
         json.dump(ssh_stats, f)
 
 
+RESET_SIGNAL = '/tmp/stats_reset_collector'
+
+
+def check_reset():
+    global ftp_pos, auth_pos
+    if os.path.exists(RESET_SIGNAL):
+        for k in ftp_stats:
+            ftp_stats[k] = 0
+        for k in ssh_stats:
+            ssh_stats[k] = 0
+        ftp_pos = 0
+        auth_pos = 0
+        try:
+            os.remove(RESET_SIGNAL)
+        except OSError:
+            pass
+
+
 if __name__ == '__main__':
     # Touch log files to ensure they exist
     for log in [FTP_LOG, AUTH_LOG]:
@@ -120,6 +138,7 @@ if __name__ == '__main__':
             open(log, 'w').close()
 
     while True:
+        check_reset()
         parse_ftp_log()
         parse_ssh_log()
         save_stats()

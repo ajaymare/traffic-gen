@@ -124,7 +124,7 @@ class TrafficEngine:
                     "running": job.running,
                     "stats": dict(job.stats),
                     "config": dict(job.config),
-                    "logs": list(job.logs)[-50:],
+                    "logs": list(job.logs)[-100:],
                     "elapsed": job.elapsed(),
                     "remaining": job.remaining(),
                     "duration": job.duration,
@@ -201,6 +201,11 @@ class TrafficEngine:
         with self._lock:
             for job in self.jobs.values():
                 job.running = False
+
+    def clear_stats(self):
+        with self._lock:
+            for job in self.jobs.values():
+                job.stats = {"bytes_sent": 0, "bytes_recv": 0, "requests": 0, "errors": 0}
 
     # ─── HTTP / HTTPS ───────────────────────────────────────
 

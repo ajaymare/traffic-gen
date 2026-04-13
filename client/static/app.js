@@ -296,6 +296,11 @@ async function stopAll() {
     addLog('[ALL] Stopping all traffic');
 }
 
+async function clearStats() {
+    await apiPost('/api/clear_stats', {});
+    addLog('[STATS] Stats cleared');
+}
+
 function getSelectedProtos() {
     return Object.keys(PROTOCOLS).filter(p =>
         document.getElementById(`select-${p}`).checked

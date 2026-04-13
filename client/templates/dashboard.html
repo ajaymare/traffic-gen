@@ -19,7 +19,10 @@
     <div class="card">
         <div class="card-header" onclick="toggleSection('stats')">
             <span>Live Statistics</span>
-            <span class="chevron" id="chevron-stats">&#9660;</span>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <button class="btn btn-secondary" onclick="clearStats()" style="padding:3px 10px;font-size:10px">Clear Stats</button>
+                <span class="chevron" id="chevron-stats">&#9660;</span>
+            </div>
         </div>
         <div class="card-body" id="section-stats">
             <div class="stats-grid">

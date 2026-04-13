@@ -71,6 +71,12 @@ def sudo_auth():
     return jsonify({"authenticated": True})
 
 
+@app.route('/api/clear_stats', methods=['POST'])
+def clear_stats():
+    engine.clear_stats()
+    return jsonify({"ok": True, "message": "Stats cleared"})
+
+
 # ─── Router Link Simulation ──────────────────────────────
 
 @app.route('/api/routers', methods=['GET'])

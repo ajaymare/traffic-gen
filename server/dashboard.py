@@ -243,6 +243,26 @@ DASHBOARD_HTML = r"""
         }
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
+        /* Toast notifications */
+        .notification {
+            display: none; padding: 12px 20px; border-radius: 6px;
+            font-size: 13px; font-weight: 500; margin-bottom: 12px;
+            animation: notifSlide 0.3s ease-out;
+        }
+        .notification.success {
+            background: #e6f4ee; color: #0d6e3f; border: 1px solid #27ae60;
+        }
+        .notification.error {
+            background: #fde8e8; color: #9b1c1c; border: 1px solid #dc3545;
+        }
+        .notification.info {
+            background: #e8f0fe; color: #1a4a8a; border: 1px solid #0066cc;
+        }
+        @keyframes notifSlide {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         @media (max-width: 900px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
@@ -265,10 +285,14 @@ DASHBOARD_HTML = r"""
 <!-- Server Tab -->
 <div class="tab-content active" id="tab-server">
 <div class="container">
+    <div class="notification" id="server-notification"></div>
     <div class="card">
         <div class="card-header" onclick="toggleSection('srv-stats')">
             <span>Aggregate Traffic</span>
-            <span class="chevron" id="chevron-srv-stats">&#9660;</span>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <button class="btn btn-secondary" onclick="clearServerStats()" style="padding:3px 10px;font-size:10px">Clear Stats</button>
+                <span class="chevron" id="chevron-srv-stats">&#9660;</span>
+            </div>
         </div>
         <div class="card-body" id="section-srv-stats">
             <div class="stats-grid">
@@ -491,28 +515,56 @@ let clientList = {};
 let clientLogs = {};
 let pollInterval = null;
 
+// ─── Notification ─────────────────────────────────────────────
+function showNotification(message, type) {
+    var el = document.getElementById('server-notification');
+    if (!el) return;
+    el.className = 'notification ' + (type || 'info');
+    el.textContent = message;
+    el.style.display = 'block';
+    if (el._timer) clearTimeout(el._timer);
+    el._timer = setTimeout(function() { el.style.display = 'none'; }, 6000);
+}
+
 // ─── Helpers ──────────────────────────────────────────────────
 async function restartService(name) {
     if (!confirm('Restart ' + name + '?')) return;
+    showNotification('Restarting ' + name + '...', 'info');
     try {
         const resp = await fetch('/api/service/restart', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({service: name})
         });
         const data = await resp.json();
-        alert(data.message + '\n' + (data.results || []).join('\n'));
-    } catch(e) { alert('Failed to restart: ' + e); }
+        if (data.ok) {
+            showNotification('Service ' + name + ' restarted successfully', 'success');
+        } else {
+            showNotification('Failed to restart ' + name + ': ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch(e) { showNotification('Failed to restart ' + name + ': ' + e, 'error'); }
 }
 
 async function restartAllServices() {
-    if (!confirm('Restart ALL server services?')) return;
+    if (!confirm('Restart all server services?')) return;
+    showNotification('Restarting all services...', 'info');
     try {
         const resp = await fetch('/api/service/restart-all', {
             method: 'POST', headers: {'Content-Type': 'application/json'}
         });
         const data = await resp.json();
-        alert(data.message + '\n' + (data.output || ''));
-    } catch(e) { alert('Failed to restart: ' + e); }
+        if (data.ok) {
+            showNotification('All services restarted successfully', 'success');
+        } else {
+            showNotification('Failed to restart services: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch(e) { showNotification('Failed to restart services: ' + e, 'error'); }
+}
+
+async function clearServerStats() {
+    try {
+        const resp = await apiPost('/api/clear_stats', {});
+        if (resp.ok) showNotification('Server stats cleared', 'success');
+    } catch(e) { showNotification('Failed to clear stats: ' + e, 'error'); }
 }
 
 function fmtBytes(b) {
@@ -648,7 +700,10 @@ async function renderClientTab(name) {
         '<button class="btn btn-danger" onclick="removeClient(\'' + name + '\')">Remove Client</button>' +
         '</div></div>' +
         // Stats
-        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-stats\')"><span>Live Statistics</span><span class="chevron" id="chevron-c-' + name + '-stats">&#9660;</span></div><div class="card-body" id="section-c-' + name + '-stats">' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-stats\')"><span>Live Statistics</span>' +
+        '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
+        '<button class="btn btn-secondary" onclick="clientClearStats(\'' + name + '\')" style="padding:3px 10px;font-size:10px">Clear Stats</button>' +
+        '<span class="chevron" id="chevron-c-' + name + '-stats">&#9660;</span></div></div><div class="card-body" id="section-c-' + name + '-stats">' +
         '<div class="stats-grid">' +
         '<div class="stat-box"><div class="stat-label">Bytes Sent</div><div class="stat-value client-val" id="c-' + name + '-sent">0 B</div></div>' +
         '<div class="stat-box"><div class="stat-label">Bytes Received</div><div class="stat-value client-val" id="c-' + name + '-recv">0 B</div></div>' +
@@ -754,6 +809,11 @@ async function clientStartProto(clientName, proto) {
 async function clientStopProto(clientName, proto) {
     const res = await apiPost('/api/client/' + clientName + '/stop', { protocol: proto });
     addClientLog(clientName, '[' + proto.toUpperCase() + '] ' + (res.message || res.error || 'sent'));
+}
+
+async function clientClearStats(clientName) {
+    const res = await apiPost('/api/client/' + clientName + '/clear_stats', {});
+    addClientLog(clientName, '[STATS] ' + (res.message || 'Stats cleared'));
 }
 
 async function clientStopAll(clientName) {
@@ -1301,7 +1361,7 @@ async function pollClientStatus(clientName) {
                 if (timer) timer.style.display = 'none';
             }
         }
-        // Collect logs from all protocols
+        // Collect logs from all protocols with timestamps for sorting
         let allLogs = [];
         for (const [proto, info] of Object.entries(data.jobs || {})) {
             if (info.logs) {
@@ -1310,11 +1370,18 @@ async function pollClientStatus(clientName) {
                 }
             }
         }
+        // Sort by embedded timestamp [HH:MM:SS]
+        allLogs.sort(function(a, b) {
+            var ta = a.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+            var tb = b.match(/\[(\d{2}:\d{2}:\d{2})\]/);
+            if (ta && tb) return ta[1].localeCompare(tb[1]);
+            return 0;
+        });
         // Update activity log panel with remote logs
         const panel = document.getElementById('log-' + clientName);
         if (panel && allLogs.length > 0) {
-            const last50 = allLogs.slice(-50);
-            panel.innerHTML = last50.map(l => {
+            const lastN = allLogs.slice(-200);
+            panel.innerHTML = lastN.map(l => {
                 const cls = l.toLowerCase().includes('error') ? ' error' : '';
                 const d = document.createElement('div');
                 d.textContent = l;
@@ -1840,6 +1907,24 @@ def client_source_ips(name):
 def client_topology(name):
     result, code = proxy_to_client(name, '/api/topology')
     return jsonify(result), code
+
+
+@app.route('/api/client/<name>/clear_stats', methods=['POST'])
+def client_clear_stats(name):
+    result, code = proxy_to_client(name, '/api/clear_stats', 'POST', {})
+    return jsonify(result), code
+
+
+@app.route('/api/clear_stats', methods=['POST'])
+def clear_server_stats():
+    """Reset all server-side stats by creating signal files for each collector."""
+    signals = ['/tmp/stats_reset_http', '/tmp/stats_reset_echo', '/tmp/stats_reset_collector']
+    for sig in signals:
+        try:
+            open(sig, 'w').close()
+        except Exception:
+            pass
+    return jsonify({"ok": True, "message": "Server stats cleared"})
 
 
 FTP_DATA_DIR = '/data'

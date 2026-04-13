@@ -238,8 +238,21 @@ def dns_server(port=9998):
 
 # ─── Stats & Main ────────────────────────────────────────────
 
+RESET_SIGNAL = '/tmp/stats_reset_echo'
+
+
 def save_stats():
     while True:
+        # Check for reset signal
+        if os.path.exists(RESET_SIGNAL):
+            with stats_lock:
+                for svc in stats.values():
+                    for k in svc:
+                        svc[k] = 0
+            try:
+                os.remove(RESET_SIGNAL)
+            except OSError:
+                pass
         with stats_lock:
             with open(STATS_FILE, 'w') as f:
                 json.dump(stats, f)
