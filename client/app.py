@@ -142,12 +142,75 @@ def router_status(router_id):
     return jsonify(router_manager.get_status(router_id))
 
 
-_topo_cache = {'hops': [], 'time': 0}
+import concurrent.futures
+
+# Per-protocol traceroute config: args for traceroute + which config key holds the dest host
+PROTO_TRACEROUTE = {
+    'https':      {'args': ['-T', '-p', '443'],  'label': 'HTTPS',       'port': 443,  'host_key': 'url'},
+    'iperf':      {'args': ['-T', '-p', '5201'], 'label': 'iperf3',      'port': 5201, 'host_key': 'host'},
+    'http_plain': {'args': ['-T', '-p', '9999'], 'label': 'HTTP',        'port': 9999, 'host_key': 'host'},
+    'dns':        {'args': ['-U', '-p', '53'],   'label': 'DNS',         'port': 53,   'host_key': 'host'},
+    'ftp':        {'args': ['-T', '-p', '21'],   'label': 'FTP',         'port': 21,   'host_key': 'host'},
+    'ssh':        {'args': ['-T', '-p', '2222'], 'label': 'SSH',         'port': 2222, 'host_key': 'host'},
+    'hping3':     {'args': [],                   'label': 'hping3',      'port': 0,    'host_key': 'host'},
+    'ext_https':  {'args': ['-T', '-p', '443'],  'label': 'Ext HTTPS',   'port': 443,  'host_key': 'urls'},
+}
+
+# Cache: keyed by "proto:dest" → {'hops': [...], 'time': float}
+_topo_path_cache = {}
+_TOPO_CACHE_TTL = 30
+
+
+def _run_traceroute(dest, extra_args=None):
+    """Run traceroute to dest with optional extra args, return list of hop dicts."""
+    cmd = ['traceroute', '-n', '-q', '1', '-w', '2', '-m', '15']
+    if extra_args:
+        cmd.extend(extra_args)
+    cmd.append(dest)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        hops = []
+        for line in result.stdout.strip().split('\n')[1:]:
+            parts = line.split()
+            if len(parts) >= 2:
+                ip = parts[1] if parts[1] != '*' else '*'
+                rtt = parts[2] if len(parts) >= 3 and parts[1] != '*' else '--'
+                hops.append({'hop': int(parts[0]), 'ip': ip, 'rtt': rtt})
+        return hops
+    except Exception:
+        return []
+
+
+def _get_dest_for_proto(proto_key, job_config):
+    """Extract destination host from a running job's config."""
+    tc = PROTO_TRACEROUTE.get(proto_key, {})
+    host_key = tc.get('host_key', 'host')
+
+    if host_key == 'url':
+        url = job_config.get('url', '')
+        # Extract hostname from URL
+        try:
+            from urllib.parse import urlparse
+            return urlparse(url).hostname or SERVER_HOST
+        except Exception:
+            return SERVER_HOST
+    elif host_key == 'urls':
+        raw = job_config.get('urls', job_config.get('url', ''))
+        urls = [u.strip() for u in raw.replace(',', '\n').split('\n') if u.strip()]
+        if urls:
+            try:
+                from urllib.parse import urlparse
+                return urlparse(urls[0]).hostname or SERVER_HOST
+            except Exception:
+                return SERVER_HOST
+        return SERVER_HOST
+    else:
+        return job_config.get('host', SERVER_HOST)
 
 
 @app.route('/api/topology')
 def topology():
-    """Return topology with traceroute hops, running protocols, and router state."""
+    """Return topology with per-protocol traceroute paths and router state."""
     client_ip = '--'
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -157,33 +220,82 @@ def topology():
     except Exception:
         pass
 
-    # Traceroute with 30s cache
-    if time.time() - _topo_cache['time'] > 30:
-        try:
-            result = subprocess.run(
-                ['traceroute', '-n', '-q', '1', '-w', '2', '-m', '15', SERVER_HOST],
-                capture_output=True, text=True, timeout=20)
-            hops = []
-            for line in result.stdout.strip().split('\n')[1:]:
-                parts = line.split()
-                if len(parts) >= 2:
-                    ip = parts[1] if parts[1] != '*' else '*'
-                    rtt = parts[2] if len(parts) >= 3 and parts[1] != '*' else '--'
-                    hops.append({'hop': int(parts[0]), 'ip': ip, 'rtt': rtt})
-            _topo_cache['hops'] = hops
-            _topo_cache['time'] = time.time()
-        except Exception:
-            pass
-
-    # Running protocols with stats
+    # Get running protocols
     status = engine.get_status()
-    protocols = []
-    for proto, info in status.items():
-        protocols.append({
-            'name': proto,
-            'running': info.get('running', False),
-            'stats': info.get('stats', {}),
-        })
+
+    # Aggregate flows by base protocol
+    proto_agg = {}
+    for job_key, info in status.items():
+        parts = job_key.split('_')
+        if len(parts) >= 3 and parts[-1].isdigit():
+            base = '_'.join(parts[:-1])
+        elif len(parts) == 2 and parts[-1].isdigit():
+            base = parts[0]
+        else:
+            base = job_key
+        if base not in proto_agg:
+            proto_agg[base] = {'running': False, 'stats': {'bytes_sent': 0, 'bytes_recv': 0, 'requests': 0, 'errors': 0}, 'config': {}}
+        agg = proto_agg[base]
+        if info.get('running'):
+            agg['running'] = True
+            if not agg['config']:
+                agg['config'] = info.get('config', {})
+        for k in ('bytes_sent', 'bytes_recv', 'requests', 'errors'):
+            agg['stats'][k] += info.get('stats', {}).get(k, 0)
+
+    now = time.time()
+    paths = {}
+
+    # Always include default ICMP path
+    cache_key = 'default:' + SERVER_HOST
+    cached = _topo_path_cache.get(cache_key)
+    if not cached or now - cached['time'] > _TOPO_CACHE_TTL:
+        hops = _run_traceroute(SERVER_HOST)
+        _topo_path_cache[cache_key] = {'hops': hops, 'time': now}
+    else:
+        hops = cached['hops']
+    paths['default'] = {
+        'label': 'Default (ICMP)',
+        'dest': SERVER_HOST,
+        'port': 0,
+        'hops': hops,
+        'running': False,
+        'stats': {},
+    }
+
+    # Per-protocol traceroute for running protocols
+    def trace_proto(proto_key, agg):
+        tc = PROTO_TRACEROUTE.get(proto_key)
+        if not tc:
+            return None
+        dest = _get_dest_for_proto(proto_key, agg['config'])
+        ck = proto_key + ':' + dest
+        cached = _topo_path_cache.get(ck)
+        if cached and now - cached['time'] <= _TOPO_CACHE_TTL:
+            proto_hops = cached['hops']
+        else:
+            args = tc['args'] if tc['args'] else []
+            proto_hops = _run_traceroute(dest, args)
+            _topo_path_cache[ck] = {'hops': proto_hops, 'time': now}
+        return {
+            'key': proto_key,
+            'label': tc['label'],
+            'dest': dest,
+            'port': tc['port'],
+            'hops': proto_hops,
+            'running': agg['running'],
+            'stats': agg['stats'],
+        }
+
+    # Run traceroutes in parallel for all running protocols
+    running_protos = [(k, v) for k, v in proto_agg.items() if v['running'] and k in PROTO_TRACEROUTE]
+    if running_protos:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(trace_proto, k, v): k for k, v in running_protos}
+            for fut in concurrent.futures.as_completed(futures):
+                result = fut.result()
+                if result:
+                    paths[result['key']] = result
 
     # Routers for impairment overlay
     routers = router_manager.list_routers()
@@ -191,8 +303,7 @@ def topology():
     return jsonify({
         'client_ip': client_ip,
         'server_host': SERVER_HOST,
-        'hops': _topo_cache.get('hops', []),
-        'protocols': protocols,
+        'paths': paths,
         'routers': routers,
     })
 

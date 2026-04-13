@@ -799,6 +799,12 @@ let topoAnimInterval = null;
 let topoEdges = null;
 let topoAnimState = 0;
 let topoHasTraffic = false;
+let topoActiveEdgeIds = [];  // edges belonging to running protocols (animated)
+
+const TOPO_COLORS = [
+    '#0066cc', '#00a67e', '#e67e22', '#8e44ad', '#2980b9',
+    '#c0392b', '#16a085', '#d35400', '#2c3e50', '#27ae60'
+];
 
 async function refreshTopology() {
     try {
@@ -818,110 +824,155 @@ function renderTopology(data) {
     const nodes = new vis.DataSet();
     const edges = new vis.DataSet();
     topoEdges = edges;
+    topoActiveEdgeIds = [];
 
-    const hops = data.hops || [];
+    const pathsObj = data.paths || {};
     const routers = data.routers || [];
-    const protocols = data.protocols || [];
-    const runningProtos = protocols.filter(p => p.running);
-    topoHasTraffic = runningProtos.length > 0;
 
-    // Build router IP lookup for impairment overlay
+    // Build router IP lookup
     const routerByIp = {};
     routers.forEach(r => { routerByIp[r.ip] = r; });
 
-    // Protocol label
-    const protoNames = runningProtos.map(p => {
-        const base = p.name.split('_')[0];
-        return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-    });
-    const protoLabel = [...new Set(protoNames)].join(', ');
+    // Separate running paths from default
+    const pathKeys = Object.keys(pathsObj);
+    const runningPaths = pathKeys.filter(k => k !== 'default' && pathsObj[k].running);
+    topoHasTraffic = runningPaths.length > 0;
 
-    // Stats summary
-    let totalSent = 0, totalRecv = 0;
-    runningProtos.forEach(p => {
-        if (p.stats) { totalSent += (p.stats.bytes_sent || 0); totalRecv += (p.stats.bytes_recv || 0); }
+    // Group paths by hop signature for merging
+    const hopSigMap = {};
+    pathKeys.forEach(k => {
+        const p = pathsObj[k];
+        const sig = (p.hops || []).map(h => h.ip).join(',');
+        if (!hopSigMap[sig]) hopSigMap[sig] = [];
+        hopSigMap[sig].push(k);
     });
-
-    const activeColor = topoHasTraffic ? '#00a67e' : '#0066cc';
-    const edgeWidth = topoHasTraffic ? 3 : 2;
 
     // CLIENT node
     nodes.add({
         id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
         color: { background: '#e6f4ee', border: '#00a67e' },
         font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
+        level: 0,
     });
 
-    // HOP nodes from traceroute
-    const nodeIds = ['client'];
-    hops.forEach((h, i) => {
-        const isLast = i === hops.length - 1;
-        const hopId = 'hop_' + h.hop;
-        const isTimeout = h.ip === '*';
-        const router = routerByIp[h.ip];
-
-        let bg = '#e8f0fe', border = '#0066cc', label = '';
-        if (isTimeout) {
-            bg = '#fde8e8'; border = '#dc3545';
-            label = 'HOP ' + h.hop + '\n* (timeout)';
-        } else if (router) {
-            const mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
-            const c = mc[router.current_mode] || { bg: '#e8f0fe', b: '#0066cc' };
-            bg = c.bg; border = c.b;
-            const mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
-            label = router.name + '\n' + h.ip + '\n' + mode;
-            if (router.current_mode === 'impaired' && router.impairment_config) {
-                const ic = router.impairment_config;
-                const parts = [];
-                if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-                if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-                if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-                if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-                if (parts.length) label += '\n' + parts.join(' / ');
-            }
-        } else {
-            label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
-        }
-
-        // Skip last hop if it matches server (it's the destination)
-        if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
-            // Don't add — server node covers it
-        } else {
-            nodes.add({
-                id: hopId, label: label, shape: 'box',
-                color: { background: bg, border: border },
-                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10,
-            });
-            nodeIds.push(hopId);
-        }
-    });
-
-    // SERVER node
+    // SERVER node (rightmost)
+    const maxHops = Math.max(1, ...pathKeys.map(k => (pathsObj[k].hops || []).length));
     nodes.add({
         id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
         color: { background: '#e8f0fe', border: '#0066cc' },
         font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
+        level: maxHops + 1,
     });
-    nodeIds.push('server');
 
-    // Edges connecting the chain
-    for (let i = 0; i < nodeIds.length - 1; i++) {
-        const from = nodeIds[i];
-        const to = nodeIds[i + 1];
-        const isFirst = i === 0;
-        edges.add({
-            id: 'e_' + i, from: from, to: to, arrows: 'to',
-            color: { color: topoHasTraffic ? activeColor : '#aab4c2' },
-            width: edgeWidth,
-            dashes: topoHasTraffic ? [8, 4] : false,
-            label: isFirst && protoLabel ? protoLabel : '',
-            font: { size: 9, color: '#0066cc', strokeWidth: 0 },
+    // Track which unique paths we've rendered (by hop signature)
+    const renderedSigs = new Set();
+    let pathIndex = 0;
+    const addedNodes = new Set(['client', 'server']);
+
+    // Render each unique path
+    pathKeys.forEach(pathKey => {
+        const path = pathsObj[pathKey];
+        const hops = path.hops || [];
+        const sig = hops.map(h => h.ip).join(',');
+
+        // Check if this signature was already rendered by a merged group
+        if (renderedSigs.has(sig)) return;
+        renderedSigs.add(sig);
+
+        // Find all protocols sharing this path
+        const mergedKeys = hopSigMap[sig] || [pathKey];
+        const labels = mergedKeys.map(k => pathsObj[k].label);
+        const isRunning = mergedKeys.some(k => k !== 'default' && pathsObj[k].running);
+        const isDefaultOnly = mergedKeys.length === 1 && mergedKeys[0] === 'default';
+
+        const color = isDefaultOnly ? '#aab4c2' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
+        if (!isDefaultOnly) pathIndex++;
+
+        const pathLabel = labels.join(', ');
+        const edgeWidth = isRunning ? 3 : 2;
+
+        // Create hop nodes for this path
+        const nodeChain = ['client'];
+        hops.forEach((h, i) => {
+            const isLast = i === hops.length - 1;
+            const isTimeout = h.ip === '*';
+            // Unique node ID per path to allow divergent paths
+            const hopId = 'hop_' + pathKey + '_' + h.hop;
+
+            // Skip last hop if it matches server
+            if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
+                return;
+            }
+
+            // Reuse node if same IP already exists at same level from another path
+            const sharedId = 'hop_shared_' + h.hop + '_' + h.ip;
+            if (addedNodes.has(sharedId)) {
+                nodeChain.push(sharedId);
+                return;
+            }
+
+            const router = routerByIp[h.ip];
+            let bg = '#e8f0fe', border = color, label = '';
+
+            if (isTimeout) {
+                bg = '#fde8e8'; border = '#dc3545';
+                label = 'HOP ' + h.hop + '\n* (timeout)';
+            } else if (router) {
+                const mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
+                const c = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
+                bg = c.bg; border = c.b;
+                const mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
+                label = router.name + '\n' + h.ip + '\n' + mode;
+                if (router.current_mode === 'impaired' && router.impairment_config) {
+                    const ic = router.impairment_config;
+                    const parts = [];
+                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+                    if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+                    if (parts.length) label += '\n' + parts.join(' / ');
+                }
+            } else {
+                label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
+            }
+
+            const useId = sharedId;
+            nodes.add({
+                id: useId, label: label, shape: 'box',
+                color: { background: bg, border: border },
+                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10,
+                level: i + 1,
+            });
+            addedNodes.add(useId);
+            nodeChain.push(useId);
         });
-    }
+        nodeChain.push('server');
 
-    // If no hops discovered, single direct edge
-    if (hops.length === 0 && nodeIds.length === 2) {
-        // Already added by the loop above
+        // Create edges for this path
+        const roundness = pathIndex * 0.15;
+        for (let i = 0; i < nodeChain.length - 1; i++) {
+            const edgeId = 'e_' + pathKey + '_' + i;
+            const isFirst = i === 0;
+            edges.add({
+                id: edgeId, from: nodeChain[i], to: nodeChain[i + 1], arrows: 'to',
+                color: { color: isRunning ? color : '#aab4c2' },
+                width: edgeWidth,
+                dashes: isRunning ? [8, 4] : (isDefaultOnly ? [4, 4] : false),
+                label: isFirst ? pathLabel : '',
+                font: { size: 9, color: color, strokeWidth: 0, background: 'rgba(255,255,255,0.7)' },
+                smooth: pathIndex > 1 ? { type: 'curvedCW', roundness: roundness } : { type: 'dynamic' },
+            });
+            if (isRunning) topoActiveEdgeIds.push({ id: edgeId, color: color });
+        }
+    });
+
+    // If no paths at all, direct client → server edge
+    if (pathKeys.length === 0) {
+        edges.add({
+            id: 'e_direct', from: 'client', to: 'server', arrows: 'to',
+            color: { color: '#aab4c2' }, width: 2, dashes: [4, 4],
+            label: 'No path data', font: { size: 9, color: '#aab4c2', strokeWidth: 0 },
+        });
     }
 
     const options = {
@@ -940,12 +991,11 @@ function renderTopology(data) {
         container.parentNode.appendChild(statsEl);
     }
     if (topoHasTraffic) {
-        const statParts = runningProtos.map(p => {
-            const base = p.name.split('_')[0];
-            const name = (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-            return name + ' (' + fmtBytes(p.stats.bytes_sent || 0) + ' sent)';
+        const statParts = runningPaths.map(k => {
+            const p = pathsObj[k];
+            return p.label + ' (' + fmtBytes((p.stats || {}).bytes_sent || 0) + ' sent)';
         });
-        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + [...new Set(statParts)].join(' | ');
+        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + statParts.join(' | ');
     } else {
         statsEl.innerHTML = '<span style="color:var(--text-secondary)">No active traffic flows</span>';
     }
@@ -969,9 +1019,10 @@ function animateTopology() {
     if (!topoEdges || !topoHasTraffic) return;
     topoAnimState = (topoAnimState + 1) % 3;
     const dashPatterns = [[8, 4], [6, 6], [4, 8]];
-    const colors = ['#00a67e', '#00b88a', '#00cc99'];
-    topoEdges.forEach(e => {
-        topoEdges.update({ id: e.id, dashes: dashPatterns[topoAnimState], color: { color: colors[topoAnimState] } });
+    topoActiveEdgeIds.forEach(e => {
+        // Lighten the base color for animation effect
+        const shade = topoAnimState === 0 ? e.color : (topoAnimState === 1 ? e.color + 'cc' : e.color + '99');
+        topoEdges.update({ id: e.id, dashes: dashPatterns[topoAnimState], color: { color: e.color } });
     });
 }
 

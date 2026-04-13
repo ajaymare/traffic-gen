@@ -1051,6 +1051,9 @@ var clientTopoEdges = {};
 var clientTopoAnimIntervals = {};
 var clientTopoAnimState = {};
 var clientTopoHasTraffic = {};
+var clientTopoActiveEdgeIds = {};
+
+var TOPO_COLORS = ['#0066cc','#00a67e','#e67e22','#8e44ad','#2980b9','#c0392b','#16a085','#d35400','#2c3e50','#27ae60'];
 
 async function clientRefreshTopology(clientName) {
     try {
@@ -1070,88 +1073,125 @@ function clientRenderTopology(clientName, data) {
     var nodes = new vis.DataSet();
     var edges = new vis.DataSet();
     clientTopoEdges[clientName] = edges;
+    clientTopoActiveEdgeIds[clientName] = [];
 
-    var hops = data.hops || [];
+    var pathsObj = data.paths || {};
     var routers = data.routers || [];
-    var protocols = data.protocols || [];
-    var runningProtos = protocols.filter(function(p) { return p.running; });
-    var hasTraffic = runningProtos.length > 0;
-    clientTopoHasTraffic[clientName] = hasTraffic;
 
     // Router IP lookup
     var routerByIp = {};
     routers.forEach(function(r) { routerByIp[r.ip] = r; });
 
-    // Protocol label
-    var protoNames = runningProtos.map(function(p) {
-        var base = p.name.split('_')[0];
-        return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-    });
-    var protoLabel = protoNames.filter(function(v, i, a) { return a.indexOf(v) === i; }).join(', ');
+    var pathKeys = Object.keys(pathsObj);
+    var runningPaths = pathKeys.filter(function(k) { return k !== 'default' && pathsObj[k].running; });
+    var hasTraffic = runningPaths.length > 0;
+    clientTopoHasTraffic[clientName] = hasTraffic;
 
-    var activeColor = hasTraffic ? '#00a67e' : '#0066cc';
-    var edgeWidth = hasTraffic ? 3 : 2;
+    // Group paths by hop signature for merging
+    var hopSigMap = {};
+    pathKeys.forEach(function(k) {
+        var p = pathsObj[k];
+        var sig = (p.hops || []).map(function(h) { return h.ip; }).join(',');
+        if (!hopSigMap[sig]) hopSigMap[sig] = [];
+        hopSigMap[sig].push(k);
+    });
 
     // CLIENT node
     nodes.add({ id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
         color: { background: '#e6f4ee', border: '#00a67e' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12 });
-
-    // HOP nodes
-    var nodeIds = ['client'];
-    for (var i = 0; i < hops.length; i++) {
-        var h = hops[i];
-        var isLast = i === hops.length - 1;
-        var hopId = 'hop_' + h.hop;
-        var isTimeout = h.ip === '*';
-        var router = routerByIp[h.ip];
-        var bg = '#e8f0fe', border = '#0066cc', label = '';
-
-        if (isTimeout) {
-            bg = '#fde8e8'; border = '#dc3545';
-            label = 'HOP ' + h.hop + '\n* (timeout)';
-        } else if (router) {
-            var mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
-            var c = mc[router.current_mode] || { bg: '#e8f0fe', b: '#0066cc' };
-            bg = c.bg; border = c.b;
-            var mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
-            label = router.name + '\n' + h.ip + '\n' + mode;
-            if (router.current_mode === 'impaired' && router.impairment_config) {
-                var ic = router.impairment_config;
-                var parts = [];
-                if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-                if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-                if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-                if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-                if (parts.length) label += '\n' + parts.join(' / ');
-            }
-        } else {
-            label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
-        }
-
-        if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
-            // Skip — server node covers it
-        } else {
-            nodes.add({ id: hopId, label: label, shape: 'box',
-                color: { background: bg, border: border },
-                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10 });
-            nodeIds.push(hopId);
-        }
-    }
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12, level: 0 });
 
     // SERVER node
+    var maxHops = 1;
+    pathKeys.forEach(function(k) { var h = (pathsObj[k].hops || []).length; if (h > maxHops) maxHops = h; });
     nodes.add({ id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
         color: { background: '#e8f0fe', border: '#0066cc' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12 });
-    nodeIds.push('server');
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12, level: maxHops + 1 });
 
-    // Edges
-    for (var j = 0; j < nodeIds.length - 1; j++) {
-        edges.add({ id: 'e_' + j, from: nodeIds[j], to: nodeIds[j + 1], arrows: 'to',
-            color: { color: hasTraffic ? activeColor : '#aab4c2' }, width: edgeWidth,
-            dashes: hasTraffic ? [8, 4] : false,
-            label: j === 0 && protoLabel ? protoLabel : '',
-            font: { size: 9, color: '#0066cc', strokeWidth: 0 } });
+    var renderedSigs = {};
+    var pathIndex = 0;
+    var addedNodes = { client: true, server: true };
+
+    pathKeys.forEach(function(pathKey) {
+        var path = pathsObj[pathKey];
+        var hops = path.hops || [];
+        var sig = hops.map(function(h) { return h.ip; }).join(',');
+
+        if (renderedSigs[sig]) return;
+        renderedSigs[sig] = true;
+
+        var mergedKeys = hopSigMap[sig] || [pathKey];
+        var labels = mergedKeys.map(function(k) { return pathsObj[k].label; });
+        var isRunning = mergedKeys.some(function(k) { return k !== 'default' && pathsObj[k].running; });
+        var isDefaultOnly = mergedKeys.length === 1 && mergedKeys[0] === 'default';
+
+        var color = isDefaultOnly ? '#aab4c2' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
+        if (!isDefaultOnly) pathIndex++;
+
+        var pathLabel = labels.join(', ');
+        var edgeWidth = isRunning ? 3 : 2;
+
+        var nodeChain = ['client'];
+        for (var i = 0; i < hops.length; i++) {
+            var h = hops[i];
+            var isLast = i === hops.length - 1;
+            var isTimeout = h.ip === '*';
+
+            if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) continue;
+
+            var sharedId = 'hop_shared_' + h.hop + '_' + h.ip;
+            if (addedNodes[sharedId]) { nodeChain.push(sharedId); continue; }
+
+            var router = routerByIp[h.ip];
+            var bg = '#e8f0fe', border = color, label = '';
+
+            if (isTimeout) {
+                bg = '#fde8e8'; border = '#dc3545';
+                label = 'HOP ' + h.hop + '\n* (timeout)';
+            } else if (router) {
+                var mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
+                var c = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
+                bg = c.bg; border = c.b;
+                var mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
+                label = router.name + '\n' + h.ip + '\n' + mode;
+                if (router.current_mode === 'impaired' && router.impairment_config) {
+                    var ic = router.impairment_config;
+                    var parts = [];
+                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+                    if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+                    if (parts.length) label += '\n' + parts.join(' / ');
+                }
+            } else {
+                label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
+            }
+
+            nodes.add({ id: sharedId, label: label, shape: 'box',
+                color: { background: bg, border: border },
+                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10, level: i + 1 });
+            addedNodes[sharedId] = true;
+            nodeChain.push(sharedId);
+        }
+        nodeChain.push('server');
+
+        var roundness = pathIndex * 0.15;
+        for (var j = 0; j < nodeChain.length - 1; j++) {
+            var edgeId = 'e_' + pathKey + '_' + j;
+            edges.add({ id: edgeId, from: nodeChain[j], to: nodeChain[j + 1], arrows: 'to',
+                color: { color: isRunning ? color : '#aab4c2' }, width: edgeWidth,
+                dashes: isRunning ? [8, 4] : (isDefaultOnly ? [4, 4] : false),
+                label: j === 0 ? pathLabel : '',
+                font: { size: 9, color: color, strokeWidth: 0, background: 'rgba(255,255,255,0.7)' },
+                smooth: pathIndex > 1 ? { type: 'curvedCW', roundness: roundness } : { type: 'dynamic' } });
+            if (isRunning) clientTopoActiveEdgeIds[clientName].push({ id: edgeId, color: color });
+        }
+    });
+
+    if (pathKeys.length === 0) {
+        edges.add({ id: 'e_direct', from: 'client', to: 'server', arrows: 'to',
+            color: { color: '#aab4c2' }, width: 2, dashes: [4, 4],
+            label: 'No path data', font: { size: 9, color: '#aab4c2', strokeWidth: 0 } });
     }
 
     var options = {
@@ -1170,13 +1210,11 @@ function clientRenderTopology(clientName, data) {
         container.parentNode.appendChild(statsEl);
     }
     if (hasTraffic) {
-        var statParts = runningProtos.map(function(p) {
-            var base = p.name.split('_')[0];
-            var name = (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-            return name + ' (' + fmtBytes(p.stats.bytes_sent || 0) + ' sent)';
+        var statParts = runningPaths.map(function(k) {
+            var p = pathsObj[k];
+            return p.label + ' (' + fmtBytes((p.stats || {}).bytes_sent || 0) + ' sent)';
         });
-        var uniqueStats = statParts.filter(function(v, i, a) { return a.indexOf(v) === i; });
-        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + uniqueStats.join(' | ');
+        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + statParts.join(' | ');
     } else {
         statsEl.innerHTML = '<span style="color:var(--text-secondary)">No active traffic flows</span>';
     }
@@ -1192,12 +1230,12 @@ function clientRenderTopology(clientName, data) {
         clientTopoAnimState[clientName] = 0;
         clientTopoAnimIntervals[clientName] = setInterval(function() {
             var es = clientTopoEdges[clientName];
+            var activeEdges = clientTopoActiveEdgeIds[clientName] || [];
             if (!es || !clientTopoHasTraffic[clientName]) return;
             var st = (clientTopoAnimState[clientName] + 1) % 3;
             clientTopoAnimState[clientName] = st;
             var dp = [[8,4],[6,6],[4,8]];
-            var cols = ['#00a67e','#00b88a','#00cc99'];
-            es.forEach(function(e) { es.update({ id: e.id, dashes: dp[st], color: { color: cols[st] } }); });
+            activeEdges.forEach(function(e) { es.update({ id: e.id, dashes: dp[st], color: { color: e.color } }); });
         }, 800);
     } else if (!hasTraffic && clientTopoAnimIntervals[clientName]) {
         clearInterval(clientTopoAnimIntervals[clientName]);
