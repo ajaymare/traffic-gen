@@ -6,6 +6,7 @@ from flask import Flask, render_template, jsonify, request
 
 from traffic_engine import TrafficEngine
 import network_shaper
+from router_shaper import router_manager
 
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(name)s %(levelname)s %(message)s')
@@ -68,37 +69,75 @@ def sudo_auth():
     return jsonify({"authenticated": True})
 
 
-@app.route('/api/link-simulation/start', methods=['POST'])
-def start_link_sim():
+# ─── Router Link Simulation ──────────────────────────────
+
+@app.route('/api/routers', methods=['GET'])
+def list_routers():
+    return jsonify(router_manager.list_routers())
+
+
+@app.route('/api/routers', methods=['POST'])
+def add_router():
     d = _get_json()
-    try:
-        config = {
-            'preset': d.get('preset', 'custom'),
-            'latency_ms': int(d.get('latency_ms', 0)),
-            'jitter_ms': int(d.get('jitter_ms', 0)),
-            'packet_loss_pct': float(d.get('packet_loss_pct', 0)),
-            'bandwidth_mbps': int(d.get('bandwidth_mbps', 0)),
-            'target': d.get('target', 'all'),
-            'ports': d.get('ports', []),
-            'cycle_mode': bool(d.get('cycle_mode', False)),
-            'healthy_duration': int(d.get('healthy_duration', 30)),
-            'impaired_duration': int(d.get('impaired_duration', 30)),
-        }
-    except (ValueError, TypeError):
-        return jsonify({"error": "Invalid parameters"}), 400
-    network_shaper.start_link_simulation(config)
-    return jsonify({"ok": True, "message": "Link simulation started"})
+    name = d.get('name', '')
+    ip = d.get('ip', '')
+    username = d.get('username', '')
+    password = d.get('password', '')
+    ok, msg, data = router_manager.add_router(name, ip, username, password)
+    if ok:
+        return jsonify({"ok": True, "message": msg, "router": data})
+    return jsonify({"ok": False, "error": msg}), 400
 
 
-@app.route('/api/link-simulation/stop', methods=['POST'])
-def stop_link_sim():
-    network_shaper.stop_link_simulation()
-    return jsonify({"ok": True, "message": "Link simulation stopped"})
+@app.route('/api/routers/<router_id>', methods=['DELETE'])
+def remove_router(router_id):
+    ok, msg = router_manager.remove_router(router_id)
+    return jsonify({"ok": ok, "message": msg}), 200 if ok else 404
 
 
-@app.route('/api/link-simulation/status')
-def link_sim_status():
-    return jsonify(network_shaper.get_link_simulation_status())
+@app.route('/api/routers/<router_id>/connect', methods=['POST'])
+def connect_router(router_id):
+    ok, msg = router_manager.connect(router_id)
+    return jsonify({"ok": ok, "message": msg}), 200 if ok else 400
+
+
+@app.route('/api/routers/<router_id>/disconnect', methods=['POST'])
+def disconnect_router(router_id):
+    ok, msg = router_manager.disconnect(router_id)
+    return jsonify({"ok": ok, "message": msg})
+
+
+@app.route('/api/routers/<router_id>/interfaces')
+def router_interfaces(router_id):
+    interfaces = router_manager.discover_interfaces(router_id)
+    return jsonify({"interfaces": interfaces})
+
+
+@app.route('/api/routers/<router_id>/select-interface', methods=['POST'])
+def router_select_interface(router_id):
+    d = _get_json()
+    iface = d.get('interface', '')
+    ok, msg = router_manager.select_interface(router_id, iface)
+    return jsonify({"ok": ok, "message": msg}), 200 if ok else 400
+
+
+@app.route('/api/routers/<router_id>/mode', methods=['POST'])
+def router_set_mode(router_id):
+    d = _get_json()
+    mode = d.get('mode', '')
+    config = {
+        'latency_ms': int(d.get('latency_ms', 0)),
+        'jitter_ms': int(d.get('jitter_ms', 0)),
+        'packet_loss_pct': float(d.get('packet_loss_pct', 0)),
+        'bandwidth_mbps': int(d.get('bandwidth_mbps', 0)),
+    }
+    ok, msg = router_manager.apply_mode(router_id, mode, config)
+    return jsonify({"ok": ok, "message": msg}), 200 if ok else 400
+
+
+@app.route('/api/routers/<router_id>/status')
+def router_status(router_id):
+    return jsonify(router_manager.get_status(router_id))
 
 
 @app.route('/api/shaping/random_bandwidth', methods=['POST'])

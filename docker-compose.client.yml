@@ -1,7 +1,7 @@
 services:
   client:
     build: ./client
-    image: ajaymare/traffic-gen-client:latest
+    image: ajaymare/traffic-client:latest
     container_name: traffic-client
     cap_add:
       - NET_ADMIN

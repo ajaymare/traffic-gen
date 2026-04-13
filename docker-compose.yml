@@ -4,7 +4,7 @@
 services:
   client:
     build: ./client
-    image: ajaymare/traffic-gen-client:latest
+    image: ajaymare/traffic-client:latest
     container_name: traffic-client
     cap_add:
       - NET_ADMIN
@@ -22,7 +22,7 @@ services:
 
   server:
     build: ./server
-    image: ajaymare/traffic-gen-server:latest
+    image: ajaymare/traffic-server:latest
     container_name: traffic-server
     ports:
       - "8081:80"

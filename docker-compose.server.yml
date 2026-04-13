@@ -1,7 +1,7 @@
 services:
   server:
     build: ./server
-    image: ajaymare/traffic-gen-server:latest
+    image: ajaymare/traffic-server:latest
     container_name: traffic-server
     ports:
       - "80:80"

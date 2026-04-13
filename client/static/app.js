@@ -287,141 +287,248 @@ async function stopSelected() {
     }
 }
 
-// ─── Link Simulation ────────────────────────────────────────
+// ─── Router Link Simulation ─────────────────────────────────
 
-const LINK_PRESETS = {
-    link_down: { latency_ms: 0, jitter_ms: 0, packet_loss_pct: 100, bandwidth_mbps: 0 },
+const ROUTER_PRESETS = {
     degraded_wan: { latency_ms: 300, jitter_ms: 50, packet_loss_pct: 5, bandwidth_mbps: 0 },
     voice_sla: { latency_ms: 200, jitter_ms: 40, packet_loss_pct: 2, bandwidth_mbps: 0 },
     video_sla: { latency_ms: 150, jitter_ms: 30, packet_loss_pct: 3, bandwidth_mbps: 0 },
 };
 
-let customPorts = [];
-
-function applyPreset(name) {
-    const p = LINK_PRESETS[name];
-    if (p) {
-        document.getElementById('link-latency').value = p.latency_ms;
-        document.getElementById('link-jitter').value = p.jitter_ms;
-        document.getElementById('link-loss').value = p.packet_loss_pct;
-        document.getElementById('link-bw').value = p.bandwidth_mbps;
+async function addRouter() {
+    const name = document.getElementById('router-add-name').value.trim();
+    const ip = document.getElementById('router-add-ip').value.trim();
+    const username = document.getElementById('router-add-user').value.trim();
+    const password = document.getElementById('router-add-pass').value;
+    const errEl = document.getElementById('router-add-error');
+    if (!name || !ip || !username) {
+        errEl.textContent = 'Name, IP, and username are required';
+        errEl.style.display = 'block';
+        return;
+    }
+    errEl.style.display = 'none';
+    const res = await apiPost('/api/routers', { name, ip, username, password });
+    if (res.ok) {
+        document.getElementById('router-add-name').value = '';
+        document.getElementById('router-add-ip').value = '';
+        document.getElementById('router-add-user').value = '';
+        document.getElementById('router-add-pass').value = '';
+        addLog(`[ROUTER] ${res.message}`);
+        loadRouters();
+    } else {
+        errEl.textContent = res.error || 'Failed to add router';
+        errEl.style.display = 'block';
+        addLog(`[ROUTER] Error: ${res.error}`);
     }
 }
 
-function toggleLinkTarget() {
-    const sel = document.querySelector('input[name="link-target"]:checked').value;
-    document.getElementById('link-ports-config').style.display = sel === 'selected' ? 'block' : 'none';
+async function removeRouter(id) {
+    if (!confirm('Remove this router?')) return;
+    const res = await fetch('/api/routers/' + id, { method: 'DELETE' });
+    const data = await res.json();
+    addLog(`[ROUTER] ${data.message}`);
+    loadRouters();
 }
 
-function addCustomPort() {
-    const port = parseInt(document.getElementById('link-custom-port').value);
-    const proto = document.getElementById('link-custom-proto').value;
-    if (!port || port < 1 || port > 65535) return;
-    customPorts.push({ port, protocol: proto });
-    document.getElementById('link-custom-port').value = '';
-    document.getElementById('link-custom-ports-list').textContent =
-        customPorts.map(p => `${p.protocol.toUpperCase()}:${p.port}`).join(', ');
+async function reconnectRouter(id) {
+    const res = await apiPost('/api/routers/' + id + '/connect', {});
+    addLog(`[ROUTER] ${res.message}`);
+    loadRouters();
 }
 
-function getSelectedPorts() {
-    const ports = [];
-    document.querySelectorAll('.link-port-cb:checked').forEach(cb => {
-        ports.push({ port: parseInt(cb.dataset.port), protocol: cb.dataset.proto });
-    });
-    return ports.concat(customPorts);
+async function refreshInterfaces(id) {
+    const resp = await fetch('/api/routers/' + id + '/interfaces');
+    const data = await resp.json();
+    addLog(`[ROUTER] Refreshed interfaces`);
+    loadRouters();
 }
 
-async function startLinkSim() {
-    const target = document.querySelector('input[name="link-target"]:checked').value;
-    const body = {
-        preset: 'custom',
-        latency_ms: parseInt(document.getElementById('link-latency').value) || 0,
-        jitter_ms: parseInt(document.getElementById('link-jitter').value) || 0,
-        packet_loss_pct: parseFloat(document.getElementById('link-loss').value) || 0,
-        bandwidth_mbps: parseInt(document.getElementById('link-bw').value) || 0,
-        target: target,
-        ports: target === 'selected' ? getSelectedPorts() : [],
-        cycle_mode: document.getElementById('link-cycle-toggle').checked,
-        healthy_duration: parseInt(document.getElementById('link-healthy-dur').value) || 30,
-        impaired_duration: parseInt(document.getElementById('link-impaired-dur').value) || 30,
-    };
-    const res = await apiPost('/api/link-simulation/start', body);
-    addLog(`[LINK SIM] ${res.message}`);
+async function selectInterface(id, iface) {
+    const res = await apiPost('/api/routers/' + id + '/select-interface', { interface: iface });
+    if (!res.ok) addLog(`[ROUTER] ${res.error || res.message}`);
 }
 
-async function stopLinkSim() {
-    const res = await apiPost('/api/link-simulation/stop', {});
-    addLog(`[LINK SIM] ${res.message}`);
+function applyRouterPreset(id, presetName) {
+    const p = ROUTER_PRESETS[presetName];
+    if (!p) return;
+    const el = (field) => document.getElementById('rtr-' + id + '-' + field);
+    if (el('latency')) el('latency').value = p.latency_ms;
+    if (el('jitter')) el('jitter').value = p.jitter_ms;
+    if (el('loss')) el('loss').value = p.packet_loss_pct;
+    if (el('bw')) el('bw').value = p.bandwidth_mbps;
 }
 
-async function pollLinkSimStatus() {
-    try {
-        const resp = await fetch('/api/link-simulation/status');
-        const data = await resp.json();
-        const statusEl = document.getElementById('link-sim-status');
-        const phaseEl = document.getElementById('link-sim-phase');
-        const countdownEl = document.getElementById('link-sim-countdown');
-        const indicatorEl = document.getElementById('link-sim-indicator');
-        const appliedEl = document.getElementById('link-sim-applied');
-        if (data.active) {
-            statusEl.style.display = 'block';
-            const phase = data.phase || 'idle';
-            phaseEl.textContent = phase.toUpperCase();
-            if (phase === 'impaired') {
-                phaseEl.style.color = '#c0392b';
-                statusEl.style.background = '#fdecea';
-                statusEl.style.borderColor = '#e74c3c';
-                indicatorEl.style.background = '#e74c3c';
-            } else if (phase === 'healthy') {
-                phaseEl.style.color = '#1e8449';
-                statusEl.style.background = '#eafaf1';
-                statusEl.style.borderColor = '#27ae60';
-                indicatorEl.style.background = '#27ae60';
-            } else {
-                phaseEl.style.color = '#888';
-                statusEl.style.background = '#f0f2f5';
-                statusEl.style.borderColor = '#ccc';
-                indicatorEl.style.background = '#888';
-            }
-            if (data.cycle_mode && data.phase_remaining > 0) {
-                const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
-                const rem = Math.round(data.phase_remaining);
-                countdownEl.textContent = `(Next: ${next} in ${rem}s)`;
-            } else if (data.cycle_mode) {
-                countdownEl.textContent = '(Cycling)';
-            } else {
-                countdownEl.textContent = '(Static — no cycling)';
-            }
-            // Show current impairment values
-            const cfg = data.config || {};
-            const parts = [];
-            if (phase === 'impaired') {
-                if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
-                if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
-                if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
-                if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
-                if (cfg.packet_loss_pct >= 100) parts.length = 0, parts.push('LINK DOWN — 100% packet loss');
-                appliedEl.textContent = parts.length ? 'Applied: ' + parts.join(' | ') : '';
-            } else if (phase === 'healthy') {
-                appliedEl.textContent = 'No impairment — traffic flowing normally';
-            } else {
-                appliedEl.textContent = '';
-            }
-        } else {
-            statusEl.style.display = 'none';
+async function applyRouterMode(id, mode) {
+    const body = { mode };
+    if (mode === 'impaired') {
+        const el = (field) => document.getElementById('rtr-' + id + '-' + field);
+        body.latency_ms = parseInt(el('latency')?.value) || 0;
+        body.jitter_ms = parseInt(el('jitter')?.value) || 0;
+        body.packet_loss_pct = parseFloat(el('loss')?.value) || 0;
+        body.bandwidth_mbps = parseInt(el('bw')?.value) || 0;
+    }
+    const res = await apiPost('/api/routers/' + id + '/mode', body);
+    addLog(`[ROUTER] ${res.message || res.error}`);
+    loadRouters();
+}
+
+function renderRouterCard(r) {
+    const id = r.router_id;
+    const connColor = r.connected ? '#27ae60' : '#e74c3c';
+    const connText = r.connected ? 'Connected' : 'Disconnected';
+
+    let ifaceRows = '';
+    if (r.interfaces && r.interfaces.length) {
+        for (const iface of r.interfaces) {
+            const checked = iface.name === r.selected_interface ? 'checked' : '';
+            const stateColor = iface.state === 'up' ? '#27ae60' : '#e74c3c';
+            const ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
+            const descStr = iface.description ? ' — ' + iface.description : '';
+            ifaceRows += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">
+                <input type="radio" name="rtr-${id}-iface" value="${iface.name}" ${checked}
+                    onchange="selectInterface('${id}','${iface.name}')">
+                <strong>${iface.name}</strong>
+                <span style="color:#666">${ipStr}${descStr}</span>
+                <span style="color:${stateColor};font-weight:600;font-size:11px">${iface.state.toUpperCase()}</span>
+            </label>`;
         }
-        // Merge link sim logs into activity log
-        if (data.logs) {
-            for (const line of data.logs) {
-                const key = 'linksim:' + line;
-                if (!_seenEngineLogs.has(key)) {
-                    _seenEngineLogs.add(key);
-                    logBuf.push('[LINK SIM] ' + line);
+    } else {
+        ifaceRows = '<div style="color:#888;font-size:12px">No interfaces discovered</div>';
+    }
+
+    // Mode indicator
+    let modeHtml = '';
+    if (r.current_mode === 'healthy') {
+        modeHtml = `<div style="padding:8px 12px;background:#eafaf1;border:2px solid #27ae60;border-radius:8px;font-size:13px;margin-bottom:12px">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:6px"></span>
+            <strong style="color:#1e8449">HEALTHY</strong> — ${r.selected_interface || '?'} up, no impairment</div>`;
+    } else if (r.current_mode === 'impaired') {
+        const cfg = r.impairment_config || {};
+        const parts = [];
+        if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
+        if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
+        if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
+        if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
+        modeHtml = `<div style="padding:8px 12px;background:#fdecea;border:2px solid #e74c3c;border-radius:8px;font-size:13px;margin-bottom:12px">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:6px"></span>
+            <strong style="color:#c0392b">IMPAIRED</strong> — ${r.selected_interface || '?'} | ${parts.join(' | ') || 'custom'}</div>`;
+    } else if (r.current_mode === 'link_down') {
+        modeHtml = `<div style="padding:8px 12px;background:#1a1a2e;border:2px solid #ef4444;border-radius:8px;font-size:13px;margin-bottom:12px;color:#fff">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:6px"></span>
+            <strong>LINK DOWN</strong> — ${r.selected_interface || '?'} is shut down</div>`;
+    }
+
+    return `<div style="background:#f7f8fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${connColor}"></span>
+                <strong style="font-size:14px">${r.name}</strong>
+                <span style="color:#666;font-size:12px">${r.ip}</span>
+                <span style="color:${connColor};font-size:11px;font-weight:600">${connText}</span>
+            </div>
+            <div style="display:flex;gap:6px">
+                ${!r.connected ? '<button class="btn btn-start" onclick="reconnectRouter(\'' + id + '\')" style="padding:3px 10px;font-size:11px">Reconnect</button>' : ''}
+                <button class="btn btn-danger" onclick="removeRouter('${id}')" style="padding:3px 10px;font-size:11px">Remove</button>
+            </div>
+        </div>
+        ${r.connected ? `
+        <!-- Interfaces -->
+        <div style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <label style="font-size:12px;font-weight:600">Interfaces</label>
+                <button class="btn btn-secondary" onclick="refreshInterfaces('${id}')" style="padding:2px 10px;font-size:11px">Refresh</button>
+            </div>
+            <div style="padding:6px 10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
+                ${ifaceRows}
+            </div>
+        </div>
+        <!-- Presets -->
+        <div style="margin-bottom:10px">
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Presets</label>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','degraded_wan')" style="padding:3px 10px;font-size:11px">Degraded WAN</button>
+                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','voice_sla')" style="padding:3px 10px;font-size:11px">Voice SLA</button>
+                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','video_sla')" style="padding:3px 10px;font-size:11px">Video SLA</button>
+            </div>
+        </div>
+        <!-- Impairment Values -->
+        <div style="margin-bottom:12px">
+            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Impairment Values</label>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+                <label style="font-size:12px">Latency</label>
+                <input type="number" id="rtr-${id}-latency" value="${(r.impairment_config||{}).latency_ms||0}" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>
+                <label style="font-size:12px;margin-left:6px">Jitter</label>
+                <input type="number" id="rtr-${id}-jitter" value="${(r.impairment_config||{}).jitter_ms||0}" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>
+                <label style="font-size:12px;margin-left:6px">Loss</label>
+                <input type="number" id="rtr-${id}-loss" value="${(r.impairment_config||{}).packet_loss_pct||0}" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>
+                <label style="font-size:12px;margin-left:6px">BW</label>
+                <input type="number" id="rtr-${id}-bw" value="${(r.impairment_config||{}).bandwidth_mbps||0}" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps</span>
+            </div>
+        </div>
+        ${modeHtml}
+        <!-- Mode Buttons -->
+        <div style="display:flex;gap:8px">
+            <button class="btn btn-start" onclick="applyRouterMode('${id}','healthy')" style="padding:6px 16px">Healthy</button>
+            <button class="btn btn-primary" onclick="applyRouterMode('${id}','impaired')" style="padding:6px 16px">Apply Impaired</button>
+            <button class="btn btn-danger" onclick="applyRouterMode('${id}','link_down')" style="padding:6px 16px">Link Down</button>
+        </div>
+        ` : '<div style="color:#888;font-size:12px;padding:8px 0">Router disconnected. Click Reconnect to restore.</div>'}
+    </div>`;
+}
+
+async function loadRouters() {
+    try {
+        const resp = await fetch('/api/routers');
+        const routers = await resp.json();
+        const container = document.getElementById('router-cards-container');
+        if (!container) return;
+        if (!routers.length) {
+            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            return;
+        }
+        container.innerHTML = routers.map(r => renderRouterCard(r)).join('');
+    } catch(e) {}
+}
+
+async function pollRouterStatus() {
+    try {
+        const resp = await fetch('/api/routers');
+        const routers = await resp.json();
+        const container = document.getElementById('router-cards-container');
+        if (!container) return;
+        if (!routers.length) {
+            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            return;
+        }
+        // Preserve impairment input values during re-render
+        const savedValues = {};
+        for (const r of routers) {
+            const id = r.router_id;
+            for (const f of ['latency','jitter','loss','bw']) {
+                const el = document.getElementById('rtr-' + id + '-' + f);
+                if (el) savedValues[id + '-' + f] = el.value;
+            }
+        }
+        container.innerHTML = routers.map(r => renderRouterCard(r)).join('');
+        // Restore saved input values
+        for (const [key, val] of Object.entries(savedValues)) {
+            const el = document.getElementById('rtr-' + key);
+            if (el) el.value = val;
+        }
+        // Merge router logs into activity log
+        for (const r of routers) {
+            if (r.logs) {
+                for (const line of r.logs) {
+                    const key = 'rtr:' + r.router_id + ':' + line;
+                    if (!_seenEngineLogs.has(key)) {
+                        _seenEngineLogs.add(key);
+                        logBuf.push('[ROUTER:' + r.name + '] ' + line);
+                    }
                 }
             }
-            renderLogPanel();
         }
-    } catch (e) { /* ignore */ }
+        renderLogPanel();
+    } catch(e) {}
 }
 
 // ─── Status polling ────────────────────────────────────────
@@ -567,9 +674,9 @@ function toggleAutoRefresh() {
     const enabled = document.getElementById('auto-refresh-toggle').checked;
     if (enabled) {
         if (!autoRefreshInterval) {
-            autoRefreshInterval = setInterval(() => { pollStatus(); pollLinkSimStatus(); }, 2000);
+            autoRefreshInterval = setInterval(() => { pollStatus(); pollRouterStatus(); }, 2000);
             pollStatus();
-            pollLinkSimStatus();
+            pollRouterStatus();
         }
     } else {
         if (autoRefreshInterval) {
@@ -578,24 +685,6 @@ function toggleAutoRefresh() {
         }
     }
     addLog(enabled ? 'Auto-refresh enabled' : 'Auto-refresh paused');
-}
-
-// ─── Random Bandwidth ───────────────────────────────────────
-
-async function toggleRandomBandwidth() {
-    const enabled = document.getElementById('random-bw-toggle').checked;
-    const res = await apiPost('/api/shaping/random_bandwidth', {
-        enabled, min_mbps: 20, max_mbps: 1000, interval: 10
-    });
-    addLog('[SHAPING] ' + res.message);
-    updateRandomBwStatus(enabled);
-}
-
-function updateRandomBwStatus(running) {
-    const el = document.getElementById('random-bw-status');
-    if (el) el.textContent = running ? 'Active' : '';
-    const toggle = document.getElementById('random-bw-toggle');
-    if (toggle) toggle.checked = running;
 }
 
 // ─── Source IPs ─────────────────────────────────────────────
@@ -633,62 +722,6 @@ async function loadSourceIps() {
     } catch(e) {}
 }
 
-// ─── Interface ──────────────────────────────────────────────
-
-async function loadInterface() {
-    try {
-        const resp = await fetch('/api/interface');
-        const data = await resp.json();
-        const el = document.getElementById('link-interface-name');
-        if (el) el.textContent = data.interface || 'unknown';
-    } catch (e) {}
-}
-
-async function changeInterface() {
-    const iface = prompt('Enter network interface name (e.g. eth0, eth1, ens192):');
-    if (!iface) return;
-    const res = await apiPost('/api/interface', { interface: iface });
-    addLog('[INTERFACE] ' + res.message);
-    const el = document.getElementById('link-interface-name');
-    if (el) el.textContent = res.interface || iface;
-}
-
-// ─── Link Sim restore ───────────────────────────────────────
-
-async function loadLinkSimStatus() {
-    try {
-        const resp = await fetch('/api/link-simulation/status');
-        const data = await resp.json();
-        if (data.active && data.config) {
-            const c = data.config;
-            document.getElementById('link-latency').value = c.latency_ms || 0;
-            document.getElementById('link-jitter').value = c.jitter_ms || 0;
-            document.getElementById('link-loss').value = c.packet_loss_pct || 0;
-            document.getElementById('link-bw').value = c.bandwidth_mbps || 0;
-            if (c.cycle_mode) {
-                document.getElementById('link-cycle-toggle').checked = true;
-                document.getElementById('link-cycle-config').style.display = 'block';
-                document.getElementById('link-healthy-dur').value = c.healthy_duration || 30;
-                document.getElementById('link-impaired-dur').value = c.impaired_duration || 30;
-            }
-            if (c.target === 'selected') {
-                document.querySelector('input[name="link-target"][value="selected"]').checked = true;
-                document.getElementById('link-ports-config').style.display = 'block';
-            }
-        }
-        pollLinkSimStatus();
-    } catch (e) { /* ignore */ }
-}
-
-async function loadRandomBwStatus() {
-    try {
-        const resp = await fetch('/api/shaping/random_bandwidth/status');
-        const data = await resp.json();
-        if (data.running) updateRandomBwStatus(true);
-    } catch (e) {
-        // fallback: endpoint may not exist, ignore
-    }
-}
 
 // ─── FTP File List ──────────────────────────────────────────
 
@@ -712,17 +745,11 @@ async function loadFtpFileList() {
 
 document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
-    loadInterface();
-    loadLinkSimStatus();
+    loadRouters();
     loadSourceIps();
     loadFtpFileList();
-    document.getElementById('random-bw-toggle').addEventListener('change', toggleRandomBandwidth);
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
-    document.getElementById('link-cycle-toggle').addEventListener('change', () => {
-        document.getElementById('link-cycle-config').style.display =
-            document.getElementById('link-cycle-toggle').checked ? 'block' : 'none';
-    });
-    autoRefreshInterval = setInterval(() => { pollStatus(); pollLinkSimStatus(); }, 2000);
+    autoRefreshInterval = setInterval(() => { pollStatus(); pollRouterStatus(); }, 2000);
     setInterval(loadFtpFileList, 10000);
     pollStatus();
     addLog('Dashboard ready.');

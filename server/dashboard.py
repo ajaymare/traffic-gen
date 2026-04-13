@@ -593,73 +593,25 @@ async function renderClientTab(name) {
         '<div class="stat-box"><div class="stat-label">Requests</div><div class="stat-value client-val" id="c-' + name + '-reqs">0</div></div>' +
         '<div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value client-val" id="c-' + name + '-errors">0</div></div>' +
         '</div></div></div>' +
-        // Link Simulation
-        '<div class="card"><div class="card-header">Link Simulation</div><div class="card-body">' +
-        // Target
-        '<div style="margin-bottom:12px">' +
-        '<label style="display:inline-flex;align-items:center;gap:4px;margin-right:16px"><input type="radio" name="c-' + name + '-link-target" value="all" checked onchange="clientToggleLinkTarget(\'' + name + '\')"> All Traffic</label>' +
-        '<label style="display:inline-flex;align-items:center;gap:4px"><input type="radio" name="c-' + name + '-link-target" value="selected" onchange="clientToggleLinkTarget(\'' + name + '\')"> Selected Protocols</label>' +
-        '<div id="c-' + name + '-link-ports-config" style="display:none;margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="443" data-proto="tcp"> HTTPS (443)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="5201" data-proto="tcp"> iperf3 (5201)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="21" data-proto="tcp"> FTP (21)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="2222" data-proto="tcp"> SSH (2222)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="9999" data-proto="tcp"> HTTP Plain (9999)</label>' +
-        '<label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" class="c-' + name + '-link-port-cb" data-port="53" data-proto="udp"> DNS (53)</label>' +
-        '</div></div></div>' +
-        // Presets
-        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Presets</label>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
-        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'link_down\')" style="padding:4px 12px;font-size:12px">Link Down</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'degraded_wan\')" style="padding:4px 12px;font-size:12px">Degraded WAN</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'voice_sla\')" style="padding:4px 12px;font-size:12px">Voice SLA</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'video_sla\')" style="padding:4px 12px;font-size:12px">Video SLA</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyPreset(\'' + name + '\',\'custom\')" style="padding:4px 12px;font-size:12px">Custom</button>' +
-        '</div></div>' +
-        // Impaired State Values
-        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:6px;display:block">Impaired State</label>' +
+        // Router Link Simulation
+        '<div class="card"><div class="card-header">Link Simulation — Routers</div><div class="card-body">' +
+        // Add Router Form
+        '<div style="margin-bottom:16px;padding:12px;background:#f0f2f5;border-radius:8px">' +
+        '<label style="font-size:12px;font-weight:600;margin-bottom:8px;display:block">Add Router</label>' +
         '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
-        '<label style="font-size:12px">Latency</label><input type="number" id="c-' + name + '-link-latency" value="0" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
-        '<label style="font-size:12px;margin-left:8px">Jitter</label><input type="number" id="c-' + name + '-link-jitter" value="0" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
-        '<label style="font-size:12px;margin-left:8px">Packet Loss</label><input type="number" id="c-' + name + '-link-loss" value="0" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>' +
-        '<label style="font-size:12px;margin-left:8px">Bandwidth</label><input type="number" id="c-' + name + '-link-bw" value="0" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps (0=unlimited)</span>' +
-        '</div></div>' +
-        // Cycle Mode
-        '<div style="margin-bottom:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
-        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><input type="checkbox" id="c-' + name + '-link-cycle-toggle" onchange="document.getElementById(\'c-' + name + '-link-cycle-config\').style.display=this.checked?\'block\':\'none\'"> <strong>Cycle Mode</strong> (alternate healthy/impaired)</label>' +
-        '<div id="c-' + name + '-link-cycle-config" style="display:none;margin-top:8px">' +
-        '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-        '<label style="font-size:12px">Healthy</label><input type="number" id="c-' + name + '-link-healthy-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
-        '<label style="font-size:12px;margin-left:8px">Impaired</label><input type="number" id="c-' + name + '-link-impaired-dur" value="30" min="5" max="600" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">sec</span>' +
-        '</div></div></div>' +
-        // Interface
-        '<div style="margin-bottom:12px;padding:8px 12px;background:#f0f2f5;border-radius:8px;font-size:13px">' +
-        'Interface: <strong id="c-' + name + '-interface-name">detecting...</strong>' +
-        '<button class="btn btn-secondary" onclick="clientChangeInterface(\'' + name + '\')" style="margin-left:8px;padding:2px 10px;font-size:11px">Change</button></div>' +
-        // Status
-        '<div id="c-' + name + '-link-sim-status" style="margin-bottom:12px;padding:10px 14px;border-radius:8px;font-size:13px;display:none;border:2px solid #ccc">' +
-        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
-        '<span id="c-' + name + '-link-sim-indicator" style="width:12px;height:12px;border-radius:50%;display:inline-block"></span>' +
-        '<strong>Link Simulation Active</strong>' +
-        '<span style="font-size:12px">—</span>' +
-        '<span>Phase: <span id="c-' + name + '-link-sim-phase" style="font-weight:700;font-size:14px">idle</span></span>' +
-        '<span id="c-' + name + '-link-sim-countdown" style="color:#555;font-size:12px"></span></div>' +
-        '<div id="c-' + name + '-link-sim-applied" style="margin-top:6px;font-size:12px;color:#444"></div></div>' +
-        // Actions
-        '<div class="shaping-actions">' +
-        '<button class="btn btn-start" onclick="clientStartLinkSim(\'' + name + '\')">Start</button>' +
-        '<button class="btn btn-stop" onclick="clientStopLinkSim(\'' + name + '\')">Stop</button>' +
+        '<input type="text" id="c-' + name + '-router-add-name" placeholder="Name" style="width:120px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
+        '<input type="text" id="c-' + name + '-router-add-ip" placeholder="Router IP" style="width:140px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
+        '<input type="text" id="c-' + name + '-router-add-user" placeholder="Username" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
+        '<input type="password" id="c-' + name + '-router-add-pass" placeholder="Password" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
+        '<button class="btn btn-start" onclick="clientAddRouter(\'' + name + '\')">Add Router</button>' +
         '</div>' +
-        // Random Bandwidth
-        '<div style="margin-top:12px;padding:10px;background:#f0f2f5;border-radius:8px">' +
-        '<label style="display:flex;align-items:center;gap:8px">' +
-        '<input type="checkbox" id="c-' + name + '-random-bw" onchange="clientToggleRandomBw(\'' + name + '\')">' +
-        '<strong>Random Bandwidth</strong> (20 Mbps – 1 Gbps, cycles every 10s)' +
-        '<span id="c-' + name + '-random-bw-status" style="color:#888;margin-left:8px"></span>' +
-        '</label></div>' +
+        '<div id="c-' + name + '-router-add-error" style="display:none;margin-top:6px;font-size:12px;color:#ef4444"></div>' +
+        '</div>' +
+        '<div id="c-' + name + '-router-cards-container"></div>' +
+        '</div></div>' +
         // Source IPs
-        '<div style="margin-top:8px;padding:10px;background:#f0f2f5;border-radius:8px">' +
+        '<div class="card"><div class="card-header">Source IP Simulation</div><div class="card-body">' +
+        '<div style="padding:10px;background:#f0f2f5;border-radius:8px">' +
         '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
         '<input type="checkbox" id="c-' + name + '-source-ip-toggle" onchange="clientToggleSourceIp(\'' + name + '\')">' +
         '<strong>Random Source IPs</strong> (simulate multiple clients)</label>' +
@@ -670,8 +622,8 @@ async function renderClientTab(name) {
         '<label style="font-size:12px">Count</label>' +
         '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
         '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
-        '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div></div>' +
-        '</div></div>' +
+        '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div>' +
+        '</div></div></div>' +
         // Protocol cards
         '<div class="card"><div class="card-header"><span>Traffic Generators</span>' +
         '<div class="bulk-actions">' +
@@ -767,163 +719,206 @@ async function clientStopSelected(clientName) {
     }
 }
 
-const LINK_PRESETS = {
-    link_down: { latency_ms: 0, jitter_ms: 0, packet_loss_pct: 100, bandwidth_mbps: 0 },
+const ROUTER_PRESETS = {
     degraded_wan: { latency_ms: 300, jitter_ms: 50, packet_loss_pct: 5, bandwidth_mbps: 0 },
     voice_sla: { latency_ms: 200, jitter_ms: 40, packet_loss_pct: 2, bandwidth_mbps: 0 },
     video_sla: { latency_ms: 150, jitter_ms: 30, packet_loss_pct: 3, bandwidth_mbps: 0 },
 };
 
-function clientApplyPreset(clientName, name) {
-    const p = LINK_PRESETS[name];
-    if (p) {
-        document.getElementById('c-' + clientName + '-link-latency').value = p.latency_ms;
-        document.getElementById('c-' + clientName + '-link-jitter').value = p.jitter_ms;
-        document.getElementById('c-' + clientName + '-link-loss').value = p.packet_loss_pct;
-        document.getElementById('c-' + clientName + '-link-bw').value = p.bandwidth_mbps;
+async function clientAddRouter(clientName) {
+    const el = id => document.getElementById('c-' + clientName + '-' + id);
+    const name = el('router-add-name').value.trim();
+    const ip = el('router-add-ip').value.trim();
+    const username = el('router-add-user').value.trim();
+    const password = el('router-add-pass').value;
+    const errEl = el('router-add-error');
+    if (!name || !ip || !username) {
+        errEl.textContent = 'Name, IP, and username are required';
+        errEl.style.display = 'block'; return;
+    }
+    errEl.style.display = 'none';
+    const res = await apiPost('/api/client/' + clientName + '/routers', { name, ip, username, password });
+    if (res.ok) {
+        el('router-add-name').value = '';
+        el('router-add-ip').value = '';
+        el('router-add-user').value = '';
+        el('router-add-pass').value = '';
+        addClientLog(clientName, '[ROUTER] ' + res.message);
+        clientLoadRouters(clientName);
+    } else {
+        errEl.textContent = res.error || 'Failed to add router';
+        errEl.style.display = 'block';
+        addClientLog(clientName, '[ROUTER] Error: ' + (res.error || ''));
     }
 }
 
-function clientToggleLinkTarget(clientName) {
-    const sel = document.querySelector('input[name="c-' + clientName + '-link-target"]:checked').value;
-    document.getElementById('c-' + clientName + '-link-ports-config').style.display = sel === 'selected' ? 'block' : 'none';
+async function clientRemoveRouter(clientName, rid) {
+    if (!confirm('Remove this router?')) return;
+    const resp = await fetch('/api/client/' + clientName + '/routers/' + rid, { method: 'DELETE' });
+    const data = await resp.json();
+    addClientLog(clientName, '[ROUTER] ' + data.message);
+    clientLoadRouters(clientName);
 }
 
-function clientGetSelectedPorts(clientName) {
-    const ports = [];
-    document.querySelectorAll('.c-' + clientName + '-link-port-cb:checked').forEach(cb => {
-        ports.push({ port: parseInt(cb.dataset.port), protocol: cb.dataset.proto });
-    });
-    return ports;
+async function clientReconnectRouter(clientName, rid) {
+    const res = await apiPost('/api/client/' + clientName + '/routers/' + rid + '/connect', {});
+    addClientLog(clientName, '[ROUTER] ' + res.message);
+    clientLoadRouters(clientName);
 }
 
-async function clientStartLinkSim(clientName) {
-    const target = document.querySelector('input[name="c-' + clientName + '-link-target"]:checked').value;
-    const body = {
-        preset: 'custom',
-        latency_ms: parseInt(document.getElementById('c-' + clientName + '-link-latency').value) || 0,
-        jitter_ms: parseInt(document.getElementById('c-' + clientName + '-link-jitter').value) || 0,
-        packet_loss_pct: parseFloat(document.getElementById('c-' + clientName + '-link-loss').value) || 0,
-        bandwidth_mbps: parseInt(document.getElementById('c-' + clientName + '-link-bw').value) || 0,
-        target: target,
-        ports: target === 'selected' ? clientGetSelectedPorts(clientName) : [],
-        cycle_mode: document.getElementById('c-' + clientName + '-link-cycle-toggle').checked,
-        healthy_duration: parseInt(document.getElementById('c-' + clientName + '-link-healthy-dur').value) || 30,
-        impaired_duration: parseInt(document.getElementById('c-' + clientName + '-link-impaired-dur').value) || 30,
-    };
-    const res = await apiPost('/api/client/' + clientName + '/link-simulation/start', body);
-    addClientLog(clientName, '[LINK SIM] ' + (res.message || ''));
+async function clientRefreshInterfaces(clientName, rid) {
+    await fetch('/api/client/' + clientName + '/routers/' + rid + '/interfaces');
+    addClientLog(clientName, '[ROUTER] Refreshed interfaces');
+    clientLoadRouters(clientName);
 }
 
-async function clientStopLinkSim(clientName) {
-    const res = await apiPost('/api/client/' + clientName + '/link-simulation/stop', {});
-    addClientLog(clientName, '[LINK SIM] ' + (res.message || ''));
+async function clientSelectInterface(clientName, rid, iface) {
+    const res = await apiPost('/api/client/' + clientName + '/routers/' + rid + '/select-interface', { interface: iface });
+    if (!res.ok) addClientLog(clientName, '[ROUTER] ' + (res.error || res.message));
 }
 
-async function clientPollLinkSimStatus(clientName) {
+function clientApplyRouterPreset(clientName, rid, presetName) {
+    const p = ROUTER_PRESETS[presetName];
+    if (!p) return;
+    var el = function(f) { return document.getElementById('c-' + clientName + '-rtr-' + rid + '-' + f); };
+    if (el('latency')) el('latency').value = p.latency_ms;
+    if (el('jitter')) el('jitter').value = p.jitter_ms;
+    if (el('loss')) el('loss').value = p.packet_loss_pct;
+    if (el('bw')) el('bw').value = p.bandwidth_mbps;
+}
+
+async function clientApplyRouterMode(clientName, rid, mode) {
+    var body = { mode: mode };
+    if (mode === 'impaired') {
+        var el = function(f) { return document.getElementById('c-' + clientName + '-rtr-' + rid + '-' + f); };
+        body.latency_ms = parseInt((el('latency') || {}).value) || 0;
+        body.jitter_ms = parseInt((el('jitter') || {}).value) || 0;
+        body.packet_loss_pct = parseFloat((el('loss') || {}).value) || 0;
+        body.bandwidth_mbps = parseInt((el('bw') || {}).value) || 0;
+    }
+    const res = await apiPost('/api/client/' + clientName + '/routers/' + rid + '/mode', body);
+    addClientLog(clientName, '[ROUTER] ' + (res.message || res.error));
+    clientLoadRouters(clientName);
+}
+
+function clientRenderRouterCard(clientName, r) {
+    var id = r.router_id;
+    var prefix = 'c-' + clientName + '-rtr-' + id;
+    var connColor = r.connected ? '#27ae60' : '#e74c3c';
+    var connText = r.connected ? 'Connected' : 'Disconnected';
+    var ifaceRows = '';
+    if (r.interfaces && r.interfaces.length) {
+        for (var i = 0; i < r.interfaces.length; i++) {
+            var iface = r.interfaces[i];
+            var checked = iface.name === r.selected_interface ? 'checked' : '';
+            var stateColor = iface.state === 'up' ? '#27ae60' : '#e74c3c';
+            var ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
+            var descStr = iface.description ? ' — ' + iface.description : '';
+            ifaceRows += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">' +
+                '<input type="radio" name="' + prefix + '-iface" value="' + iface.name + '" ' + checked +
+                ' onchange="clientSelectInterface(\'' + clientName + '\',\'' + id + '\',\'' + iface.name + '\')">' +
+                '<strong>' + iface.name + '</strong>' +
+                '<span style="color:#666">' + ipStr + descStr + '</span>' +
+                '<span style="color:' + stateColor + ';font-weight:600;font-size:11px">' + iface.state.toUpperCase() + '</span></label>';
+        }
+    } else {
+        ifaceRows = '<div style="color:#888;font-size:12px">No interfaces discovered</div>';
+    }
+    var modeHtml = '';
+    if (r.current_mode === 'healthy') {
+        modeHtml = '<div style="padding:8px 12px;background:#eafaf1;border:2px solid #27ae60;border-radius:8px;font-size:13px;margin-bottom:12px">' +
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:6px"></span>' +
+            '<strong style="color:#1e8449">HEALTHY</strong> — ' + (r.selected_interface || '?') + ' up, no impairment</div>';
+    } else if (r.current_mode === 'impaired') {
+        var cfg = r.impairment_config || {};
+        var parts = [];
+        if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
+        if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
+        if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
+        if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
+        modeHtml = '<div style="padding:8px 12px;background:#fdecea;border:2px solid #e74c3c;border-radius:8px;font-size:13px;margin-bottom:12px">' +
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:6px"></span>' +
+            '<strong style="color:#c0392b">IMPAIRED</strong> — ' + (r.selected_interface || '?') + ' | ' + (parts.join(' | ') || 'custom') + '</div>';
+    } else if (r.current_mode === 'link_down') {
+        modeHtml = '<div style="padding:8px 12px;background:#1a1a2e;border:2px solid #ef4444;border-radius:8px;font-size:13px;margin-bottom:12px;color:#fff">' +
+            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:6px"></span>' +
+            '<strong>LINK DOWN</strong> — ' + (r.selected_interface || '?') + ' is shut down</div>';
+    }
+    var connectedContent = r.connected ?
+        '<div style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
+        '<label style="font-size:12px;font-weight:600">Interfaces</label>' +
+        '<button class="btn btn-secondary" onclick="clientRefreshInterfaces(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 10px;font-size:11px">Refresh</button></div>' +
+        '<div style="padding:6px 10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">' + ifaceRows + '</div></div>' +
+        '<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Presets</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'degraded_wan\')" style="padding:3px 10px;font-size:11px">Degraded WAN</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'voice_sla\')" style="padding:3px 10px;font-size:11px">Voice SLA</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'video_sla\')" style="padding:3px 10px;font-size:11px">Video SLA</button></div></div>' +
+        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Impairment Values</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
+        '<label style="font-size:12px">Latency</label><input type="number" id="' + prefix + '-latency" value="' + ((r.impairment_config||{}).latency_ms||0) + '" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
+        '<label style="font-size:12px;margin-left:6px">Jitter</label><input type="number" id="' + prefix + '-jitter" value="' + ((r.impairment_config||{}).jitter_ms||0) + '" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
+        '<label style="font-size:12px;margin-left:6px">Loss</label><input type="number" id="' + prefix + '-loss" value="' + ((r.impairment_config||{}).packet_loss_pct||0) + '" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>' +
+        '<label style="font-size:12px;margin-left:6px">BW</label><input type="number" id="' + prefix + '-bw" value="' + ((r.impairment_config||{}).bandwidth_mbps||0) + '" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps</span></div></div>' +
+        modeHtml +
+        '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-start" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'healthy\')" style="padding:6px 16px">Healthy</button>' +
+        '<button class="btn btn-primary" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'impaired\')" style="padding:6px 16px">Apply Impaired</button>' +
+        '<button class="btn btn-danger" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'link_down\')" style="padding:6px 16px">Link Down</button></div>'
+        : '<div style="color:#888;font-size:12px;padding:8px 0">Router disconnected. Click Reconnect to restore.</div>';
+    return '<div style="background:#f7f8fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + connColor + '"></span>' +
+        '<strong style="font-size:14px">' + r.name + '</strong>' +
+        '<span style="color:#666;font-size:12px">' + r.ip + '</span>' +
+        '<span style="color:' + connColor + ';font-size:11px;font-weight:600">' + connText + '</span></div>' +
+        '<div style="display:flex;gap:6px">' +
+        (!r.connected ? '<button class="btn btn-start" onclick="clientReconnectRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:3px 10px;font-size:11px">Reconnect</button>' : '') +
+        '<button class="btn btn-danger" onclick="clientRemoveRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:3px 10px;font-size:11px">Remove</button></div></div>' +
+        connectedContent + '</div>';
+}
+
+async function clientLoadRouters(clientName) {
     try {
-        const resp = await fetch('/api/client/' + clientName + '/link-simulation/status');
-        const data = await resp.json();
-        const statusEl = document.getElementById('c-' + clientName + '-link-sim-status');
-        const phaseEl = document.getElementById('c-' + clientName + '-link-sim-phase');
-        const countdownEl = document.getElementById('c-' + clientName + '-link-sim-countdown');
-        const indicatorEl = document.getElementById('c-' + clientName + '-link-sim-indicator');
-        const appliedEl = document.getElementById('c-' + clientName + '-link-sim-applied');
-        if (!statusEl) return;
-        if (data.active) {
-            statusEl.style.display = 'block';
-            const phase = data.phase || 'idle';
-            phaseEl.textContent = phase.toUpperCase();
-            if (phase === 'impaired') {
-                phaseEl.style.color = '#c0392b';
-                statusEl.style.background = '#fdecea';
-                statusEl.style.borderColor = '#e74c3c';
-                if (indicatorEl) indicatorEl.style.background = '#e74c3c';
-            } else if (phase === 'healthy') {
-                phaseEl.style.color = '#1e8449';
-                statusEl.style.background = '#eafaf1';
-                statusEl.style.borderColor = '#27ae60';
-                if (indicatorEl) indicatorEl.style.background = '#27ae60';
-            } else {
-                phaseEl.style.color = '#888';
-                statusEl.style.background = '#f0f2f5';
-                statusEl.style.borderColor = '#ccc';
-                if (indicatorEl) indicatorEl.style.background = '#888';
+        const resp = await fetch('/api/client/' + clientName + '/routers');
+        const routers = await resp.json();
+        const container = document.getElementById('c-' + clientName + '-router-cards-container');
+        if (!container) return;
+        if (!routers.length) {
+            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            return;
+        }
+        container.innerHTML = routers.map(function(r) { return clientRenderRouterCard(clientName, r); }).join('');
+    } catch(e) {}
+}
+
+async function clientPollRouterStatus(clientName) {
+    try {
+        const resp = await fetch('/api/client/' + clientName + '/routers');
+        const routers = await resp.json();
+        const container = document.getElementById('c-' + clientName + '-router-cards-container');
+        if (!container) return;
+        if (!routers.length) {
+            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            return;
+        }
+        // Preserve impairment input values during re-render
+        var savedValues = {};
+        for (var i = 0; i < routers.length; i++) {
+            var rid = routers[i].router_id;
+            var fields = ['latency','jitter','loss','bw'];
+            for (var j = 0; j < fields.length; j++) {
+                var el = document.getElementById('c-' + clientName + '-rtr-' + rid + '-' + fields[j]);
+                if (el) savedValues[rid + '-' + fields[j]] = el.value;
             }
-            if (data.cycle_mode && data.phase_remaining > 0) {
-                const next = phase === 'impaired' ? 'HEALTHY' : 'IMPAIRED';
-                const rem = Math.round(data.phase_remaining);
-                countdownEl.textContent = '(Next: ' + next + ' in ' + rem + 's)';
-            } else if (data.cycle_mode) {
-                countdownEl.textContent = '(Cycling)';
-            } else {
-                countdownEl.textContent = '(Static — no cycling)';
-            }
-            const cfg = data.config || {};
-            if (appliedEl) {
-                const parts = [];
-                if (phase === 'impaired') {
-                    if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
-                    if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
-                    if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
-                    if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
-                    if (cfg.packet_loss_pct >= 100) { parts.length = 0; parts.push('LINK DOWN — 100% packet loss'); }
-                    appliedEl.textContent = parts.length ? 'Applied: ' + parts.join(' | ') : '';
-                } else if (phase === 'healthy') {
-                    appliedEl.textContent = 'No impairment — traffic flowing normally';
-                } else {
-                    appliedEl.textContent = '';
-                }
-            }
-        } else {
-            statusEl.style.display = 'none';
+        }
+        container.innerHTML = routers.map(function(r) { return clientRenderRouterCard(clientName, r); }).join('');
+        for (var key in savedValues) {
+            var el = document.getElementById('c-' + clientName + '-rtr-' + key);
+            if (el) el.value = savedValues[key];
         }
     } catch(e) {}
-}
-
-async function clientLoadInterface(clientName) {
-    try {
-        const resp = await fetch('/api/client/' + clientName + '/interface');
-        const data = await resp.json();
-        const el = document.getElementById('c-' + clientName + '-interface-name');
-        if (el) el.textContent = data.interface || 'unknown';
-    } catch(e) {}
-}
-
-async function clientChangeInterface(clientName) {
-    const iface = prompt('Enter network interface name (e.g. eth0, eth1, ens192):');
-    if (!iface) return;
-    const res = await apiPost('/api/client/' + clientName + '/interface', { interface: iface });
-    const el = document.getElementById('c-' + clientName + '-interface-name');
-    if (el) el.textContent = res.interface || iface;
-}
-
-async function clientLoadLinkSimStatus(clientName) {
-    try {
-        const resp = await fetch('/api/client/' + clientName + '/link-simulation/status');
-        const data = await resp.json();
-        if (data.active && data.config) {
-            const c = data.config;
-            document.getElementById('c-' + clientName + '-link-latency').value = c.latency_ms || 0;
-            document.getElementById('c-' + clientName + '-link-jitter').value = c.jitter_ms || 0;
-            document.getElementById('c-' + clientName + '-link-loss').value = c.packet_loss_pct || 0;
-            document.getElementById('c-' + clientName + '-link-bw').value = c.bandwidth_mbps || 0;
-            if (c.cycle_mode) {
-                document.getElementById('c-' + clientName + '-link-cycle-toggle').checked = true;
-                document.getElementById('c-' + clientName + '-link-cycle-config').style.display = 'block';
-            }
-        }
-        clientPollLinkSimStatus(clientName);
-    } catch(e) {}
-}
-
-async function clientToggleRandomBw(clientName) {
-    const enabled = document.getElementById('c-' + clientName + '-random-bw').checked;
-    const res = await apiPost('/api/client/' + clientName + '/shaping/random_bandwidth',
-        { enabled, min_mbps: 20, max_mbps: 1000, interval: 10 });
-    addClientLog(clientName, '[SHAPING] ' + (res.message || ''));
-    const st = document.getElementById('c-' + clientName + '-random-bw-status');
-    if (st) st.textContent = enabled ? 'Active' : '';
 }
 
 function clientToggleSourceIp(clientName) {
@@ -1157,7 +1152,7 @@ async function pollAll() {
         loadFtpFiles();
     } else if (clientList[activeTab]) {
         await pollClientStatus(activeTab);
-        clientPollLinkSimStatus(activeTab);
+        clientPollRouterStatus(activeTab);
     }
 }
 
@@ -1177,7 +1172,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
+        clientLoadRouters(name); clientLoadSourceIps(name);
         switchTab(name);
     }
 }
@@ -1200,7 +1195,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadInterface(name); clientLoadLinkSimStatus(name); clientLoadSourceIps(name);
+            clientLoadRouters(name); clientLoadSourceIps(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1280,6 +1275,8 @@ def proxy_to_client(name, path, method='GET', data=None):
     try:
         if method == 'POST':
             r = http_client.post(target, json=data, timeout=10)
+        elif method == 'DELETE':
+            r = http_client.delete(target, timeout=10)
         else:
             r = http_client.get(target, timeout=10)
         return r.json(), r.status_code
@@ -1479,47 +1476,63 @@ def client_stop(name):
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/link-simulation/start', methods=['POST'])
-def client_link_sim_start(name):
-    result, code = proxy_to_client(name, '/api/link-simulation/start', 'POST', request.json or {})
+@app.route('/api/client/<name>/routers', methods=['GET'])
+def client_list_routers(name):
+    result, code = proxy_to_client(name, '/api/routers')
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/link-simulation/stop', methods=['POST'])
-def client_link_sim_stop(name):
-    result, code = proxy_to_client(name, '/api/link-simulation/stop', 'POST', {})
+@app.route('/api/client/<name>/routers', methods=['POST'])
+def client_add_router(name):
+    result, code = proxy_to_client(name, '/api/routers', 'POST', request.json or {})
     return jsonify(result), code
 
 
-@app.route('/api/client/<name>/link-simulation/status')
-def client_link_sim_status(name):
-    result, code = proxy_to_client(name, '/api/link-simulation/status')
+@app.route('/api/client/<name>/routers/<rid>', methods=['DELETE'])
+def client_remove_router(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}', 'DELETE')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/connect', methods=['POST'])
+def client_connect_router(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/connect', 'POST', {})
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/disconnect', methods=['POST'])
+def client_disconnect_router(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/disconnect', 'POST', {})
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/interfaces')
+def client_router_interfaces(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/interfaces')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/select-interface', methods=['POST'])
+def client_router_select_interface(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/select-interface', 'POST', request.json or {})
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/mode', methods=['POST'])
+def client_router_mode(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/mode', 'POST', request.json or {})
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/routers/<rid>/status')
+def client_router_status(name, rid):
+    result, code = proxy_to_client(name, f'/api/routers/{rid}/status')
     return jsonify(result), code
 
 
 @app.route('/api/client/<name>/server_host')
 def client_server_host(name):
     result, code = proxy_to_client(name, '/api/server_host')
-    return jsonify(result), code
-
-
-@app.route('/api/client/<name>/sudo', methods=['GET'])
-def client_sudo(name):  # noqa: ARG001
-    return jsonify({"authenticated": True})
-
-
-@app.route('/api/client/<name>/interface', methods=['GET', 'POST'])
-def client_interface(name):
-    if request.method == 'POST':
-        result, code = proxy_to_client(name, '/api/interface', 'POST', request.json or {})
-    else:
-        result, code = proxy_to_client(name, '/api/interface')
-    return jsonify(result), code
-
-
-@app.route('/api/client/<name>/shaping/random_bandwidth', methods=['POST'])
-def client_random_bandwidth(name):
-    result, code = proxy_to_client(name, '/api/shaping/random_bandwidth', 'POST', request.json or {})
     return jsonify(result), code
 
 
