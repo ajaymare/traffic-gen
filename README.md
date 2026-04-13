@@ -1,6 +1,6 @@
 # Traffic Generator
 
-Docker-based network traffic generation and testing tool with a modern dark-themed web UI. Supports multiple protocols with real-time monitoring, router-based link simulation via SSH, and multi-client control.
+Docker-based network traffic generation and testing tool with a blue/corporate-themed web UI. Supports multiple protocols with real-time monitoring, per-protocol topology visualization, router-based link simulation via SSH, and multi-client control.
 
 ## Protocols
 
@@ -75,11 +75,20 @@ docker compose up -d
 - **Random source IPs**: Simulate multiple clients from a single container using IP aliases
 - **X-Forwarded-For**: Alias IPs used in X-Forwarded-For headers for all L7 HTTP traffic
 
+### Traffic Topology
+- **Per-protocol traceroute**: Each protocol runs its own TCP/UDP traceroute (e.g., TCP port 443 for HTTPS, UDP port 53 for DNS) to reveal SD-WAN policy routing differences
+- **Multi-path visualization**: vis.js network graph shows all discovered paths with color-coded edges per protocol
+- **Path merging**: Paths with identical hops automatically merge to reduce clutter, with protocol labels combined
+- **Live animation**: Animated edges for active traffic flows with real-time status indicators
+- **30-second cache**: Traceroute results cached per protocol to avoid excessive probing
+
 ### Monitoring
 - **Live stats**: Real-time bytes sent/received, request count, error tracking with 2-second auto-refresh
-- **Activity logs**: Detailed per-request logs for every protocol
+- **Clear stats**: Reset all accumulated counters to zero on both client and server dashboards
+- **Activity logs**: Detailed per-request logs for every protocol (up to 200 entries, chronologically sorted)
 - **Countdown timer**: Shows remaining time for each running traffic flow
-- **Dark theme UI**: Enterprise-grade dark interface with collapsible sections
+- **Blue/corporate theme**: Enterprise-grade interface with collapsible sections and white cards
+- **Inline notifications**: Toast-style notifications for service restarts instead of browser popups
 - **Docker healthchecks**: Both containers report health status via `docker ps`
 
 ### Protocol-Specific
