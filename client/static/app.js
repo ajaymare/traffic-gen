@@ -792,6 +792,162 @@ async function loadFtpFileList() {
     } catch(e) { /* server may not be reachable */ }
 }
 
+// ─── Topology ───────────────────────────────────────────────
+
+let topoNetwork = null;
+let topoRefreshInterval = null;
+
+async function refreshTopology() {
+    try {
+        const resp = await fetch('/api/topology');
+        const data = await resp.json();
+        renderTopology(data);
+    } catch(e) {
+        const container = document.getElementById('topology-container');
+        if (container) container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">Failed to load topology</div>';
+    }
+}
+
+function renderTopology(data) {
+    const container = document.getElementById('topology-container');
+    if (!container) return;
+
+    const nodes = new vis.DataSet();
+    const edges = new vis.DataSet();
+
+    // Client node
+    nodes.add({
+        id: 'client',
+        label: 'CLIENT\n' + data.client_ip,
+        shape: 'box',
+        color: { background: '#e6f4ee', border: '#00a67e', highlight: { background: '#d0efe3', border: '#008f6b' } },
+        font: { size: 12, face: 'monospace', multi: true },
+        borderWidth: 2,
+        margin: 10,
+    });
+
+    // Server node
+    nodes.add({
+        id: 'server',
+        label: 'SERVER\n' + data.server_host,
+        shape: 'box',
+        color: { background: '#e8f0fe', border: '#0066cc', highlight: { background: '#d0e0fc', border: '#0055aa' } },
+        font: { size: 12, face: 'monospace', multi: true },
+        borderWidth: 2,
+        margin: 10,
+    });
+
+    // Router nodes
+    const routers = data.routers || [];
+    routers.forEach((r, i) => {
+        const modeColors = {
+            'healthy': { background: '#e6f4ee', border: '#00a67e' },
+            'impaired': { background: '#fff3e0', border: '#ff9800' },
+            'link_down': { background: '#fde8e8', border: '#dc3545' },
+        };
+        const colors = modeColors[r.current_mode] || { background: '#f7f9fc', border: '#d4dbe6' };
+        const ifaceLabel = r.selected_interface || '';
+        const modeLabel = r.current_mode ? r.current_mode.toUpperCase().replace('_', ' ') : 'IDLE';
+        let impairLabel = '';
+        if (r.current_mode === 'impaired' && r.impairment_config) {
+            const ic = r.impairment_config;
+            const parts = [];
+            if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+            if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+            if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+            if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+            impairLabel = parts.length ? '\n' + parts.join(' / ') : '';
+        }
+
+        nodes.add({
+            id: 'router_' + r.router_id,
+            label: r.name + '\n' + r.ip + (ifaceLabel ? ' (' + ifaceLabel + ')' : '') + '\n' + modeLabel + impairLabel,
+            shape: 'box',
+            color: { background: colors.background, border: colors.border, highlight: { background: colors.background, border: colors.border } },
+            font: { size: 11, face: 'monospace', multi: true },
+            borderWidth: 2,
+            margin: 10,
+        });
+
+        // Client → Router edge
+        edges.add({
+            id: 'c2r_' + r.router_id,
+            from: 'client',
+            to: 'router_' + r.router_id,
+            arrows: 'to',
+            color: { color: colors.border, highlight: colors.border },
+            width: 2,
+            smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 },
+        });
+
+        // Router → Server edge
+        edges.add({
+            id: 'r2s_' + r.router_id,
+            from: 'router_' + r.router_id,
+            to: 'server',
+            arrows: 'to',
+            color: { color: colors.border, highlight: colors.border },
+            width: 2,
+            smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 },
+        });
+    });
+
+    // If no routers, draw direct Client → Server edge
+    if (routers.length === 0) {
+        edges.add({
+            id: 'direct',
+            from: 'client',
+            to: 'server',
+            arrows: 'to',
+            color: { color: '#0066cc' },
+            width: 2,
+            dashes: true,
+            label: 'direct',
+            font: { size: 10, color: '#6b7a8d' },
+        });
+    }
+
+    // Protocol flow labels on edges
+    const protocols = data.protocols || [];
+    if (protocols.length > 0) {
+        const protoNames = protocols.map(p => {
+            const base = p.name.split('_')[0];
+            return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+        });
+        const uniqueNames = [...new Set(protoNames)];
+        const label = uniqueNames.join(', ');
+
+        if (routers.length === 0) {
+            // Update direct edge label
+            edges.update({ id: 'direct', label: label, dashes: false, width: 3, color: { color: '#00a67e' } });
+        } else {
+            // Add protocol label to first router path
+            const firstRid = routers[0].router_id;
+            edges.update({ id: 'c2r_' + firstRid, label: label, font: { size: 9, color: '#0066cc' }, width: 3 });
+        }
+    }
+
+    const options = {
+        layout: {
+            hierarchical: {
+                direction: 'LR',
+                sortMethod: 'directed',
+                levelSeparation: 200,
+                nodeSpacing: 80,
+            }
+        },
+        physics: false,
+        interaction: { dragNodes: true, zoomView: true, dragView: true },
+        edges: { font: { align: 'top' } },
+    };
+
+    if (topoNetwork) {
+        topoNetwork.setData({ nodes, edges });
+    } else {
+        topoNetwork = new vis.Network(container, { nodes, edges }, options);
+    }
+}
+
 // ─── Init ──────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -802,6 +958,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
     autoRefreshInterval = setInterval(() => { pollStatus(); pollRouterStatus(); }, 2000);
     setInterval(loadFtpFileList, 10000);
+    setInterval(refreshTopology, 30000);
     pollStatus();
+    refreshTopology();
     addLog('Dashboard ready.');
 });

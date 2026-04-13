@@ -31,6 +31,20 @@
         </div>
     </div>
 
+    <!-- Traffic Topology -->
+    <div class="card">
+        <div class="card-header" onclick="toggleSection('topology')">
+            <span>Traffic Topology</span>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <button class="btn btn-secondary" onclick="refreshTopology()" style="padding:3px 10px;font-size:10px">Refresh</button>
+                <span class="chevron" id="chevron-topology">&#9660;</span>
+            </div>
+        </div>
+        <div class="card-body" id="section-topology">
+            <div id="topology-container" style="width:100%;height:350px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sub)"></div>
+        </div>
+    </div>
+
     <!-- Router Link Simulation -->
     <div class="card">
         <div class="card-header" onclick="toggleSection('routers')">
@@ -120,6 +134,7 @@
 </div>
 
 <script>const SERVER_HOST = {{ server_host | tojson }};</script>
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

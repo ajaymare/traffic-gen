@@ -1,5 +1,6 @@
 """Traffic Generator Client — Flask Web UI + REST API."""
 import os
+import socket
 import logging
 import subprocess
 from flask import Flask, render_template, jsonify, request
@@ -138,6 +139,47 @@ def router_set_mode(router_id):
 @app.route('/api/routers/<router_id>/status')
 def router_status(router_id):
     return jsonify(router_manager.get_status(router_id))
+
+
+@app.route('/api/topology')
+def topology():
+    """Return topology data: client IP, routers, server, running protocols."""
+    # Client IP
+    client_ip = '--'
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect((SERVER_HOST, 80))
+        client_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+
+    # Running protocols and their destinations
+    status = engine.get_status()
+    protocols = []
+    for proto, info in status.items():
+        if info.get('running'):
+            cfg = info.get('config', {})
+            dest = cfg.get('host', SERVER_HOST)
+            port = cfg.get('port', '')
+            if 'url' in cfg:
+                dest = cfg['url']
+            protocols.append({
+                'name': proto,
+                'dest': dest,
+                'port': str(port),
+                'running': True,
+            })
+
+    # Routers
+    routers = router_manager.list_routers()
+
+    return jsonify({
+        'client_ip': client_ip,
+        'server_host': SERVER_HOST,
+        'routers': routers,
+        'protocols': protocols,
+    })
 
 
 @app.route('/api/shaping/random_bandwidth', methods=['POST'])

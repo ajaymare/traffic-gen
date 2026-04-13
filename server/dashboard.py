@@ -247,6 +247,7 @@ DASHBOARD_HTML = r"""
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
     </style>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
 </head>
 <body>
 
@@ -654,6 +655,14 @@ async function renderClientTab(name) {
         '<div class="stat-box"><div class="stat-label">Requests</div><div class="stat-value client-val" id="c-' + name + '-reqs">0</div></div>' +
         '<div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value client-val" id="c-' + name + '-errors">0</div></div>' +
         '</div></div></div>' +
+        // Traffic Topology
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-topo\')"><span>Traffic Topology</span>' +
+        '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
+        '<button class="btn btn-secondary" onclick="clientRefreshTopology(\'' + name + '\')" style="padding:3px 10px;font-size:10px">Refresh</button>' +
+        '<span class="chevron" id="chevron-c-' + name + '-topo">&#9660;</span></div>' +
+        '</div><div class="card-body" id="section-c-' + name + '-topo">' +
+        '<div id="c-' + name + '-topo-container" style="width:100%;height:350px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sub)"></div>' +
+        '</div></div>' +
         // Router Link Simulation
         '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-routers\')"><span>Link Simulation — Routers</span><span class="chevron" id="chevron-c-' + name + '-routers">&#9660;</span></div><div class="card-body" id="section-c-' + name + '-routers">' +
         '<div style="margin-bottom:12px;padding:10px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">' +
@@ -1036,6 +1045,102 @@ async function clientLoadSourceIps(clientName) {
     } catch(e) {}
 }
 
+// ─── Client Topology ────────────────────────────────────────
+var clientTopoNetworks = {};
+
+async function clientRefreshTopology(clientName) {
+    try {
+        var resp = await fetch('/api/client/' + clientName + '/topology');
+        var data = await resp.json();
+        clientRenderTopology(clientName, data);
+    } catch(e) {
+        var container = document.getElementById('c-' + clientName + '-topo-container');
+        if (container) container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">Failed to load topology</div>';
+    }
+}
+
+function clientRenderTopology(clientName, data) {
+    var container = document.getElementById('c-' + clientName + '-topo-container');
+    if (!container) return;
+
+    var nodes = new vis.DataSet();
+    var edges = new vis.DataSet();
+
+    nodes.add({
+        id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
+        color: { background: '#e6f4ee', border: '#00a67e', highlight: { background: '#d0efe3', border: '#008f6b' } },
+        font: { size: 12, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
+    });
+    nodes.add({
+        id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
+        color: { background: '#e8f0fe', border: '#0066cc', highlight: { background: '#d0e0fc', border: '#0055aa' } },
+        font: { size: 12, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
+    });
+
+    var routers = data.routers || [];
+    for (var i = 0; i < routers.length; i++) {
+        var r = routers[i];
+        var modeColors = { healthy: { bg: '#e6f4ee', border: '#00a67e' }, impaired: { bg: '#fff3e0', border: '#ff9800' }, link_down: { bg: '#fde8e8', border: '#dc3545' } };
+        var mc = modeColors[r.current_mode] || { bg: '#f7f9fc', border: '#d4dbe6' };
+        var ifLabel = r.selected_interface ? ' (' + r.selected_interface + ')' : '';
+        var mLabel = r.current_mode ? r.current_mode.toUpperCase().replace('_', ' ') : 'IDLE';
+        var impLabel = '';
+        if (r.current_mode === 'impaired' && r.impairment_config) {
+            var ic = r.impairment_config;
+            var parts = [];
+            if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+            if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+            if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+            if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+            if (parts.length) impLabel = '\n' + parts.join(' / ');
+        }
+        nodes.add({
+            id: 'router_' + r.router_id,
+            label: r.name + '\n' + r.ip + ifLabel + '\n' + mLabel + impLabel,
+            shape: 'box',
+            color: { background: mc.bg, border: mc.border, highlight: { background: mc.bg, border: mc.border } },
+            font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
+        });
+        edges.add({ id: 'c2r_' + r.router_id, from: 'client', to: 'router_' + r.router_id, arrows: 'to',
+            color: { color: mc.border }, width: 2, smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 } });
+        edges.add({ id: 'r2s_' + r.router_id, from: 'router_' + r.router_id, to: 'server', arrows: 'to',
+            color: { color: mc.border }, width: 2, smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 } });
+    }
+
+    if (routers.length === 0) {
+        edges.add({ id: 'direct', from: 'client', to: 'server', arrows: 'to',
+            color: { color: '#0066cc' }, width: 2, dashes: true, label: 'direct', font: { size: 10, color: '#6b7a8d' } });
+    }
+
+    var protocols = data.protocols || [];
+    if (protocols.length > 0) {
+        var protoNames = protocols.map(function(p) {
+            var base = p.name.split('_')[0];
+            return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+        });
+        var unique = protoNames.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        var label = unique.join(', ');
+        if (routers.length === 0) {
+            edges.update({ id: 'direct', label: label, dashes: false, width: 3, color: { color: '#00a67e' } });
+        } else {
+            edges.update({ id: 'c2r_' + routers[0].router_id, label: label, font: { size: 9, color: '#0066cc' }, width: 3 });
+        }
+    }
+
+    var options = {
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 200, nodeSpacing: 80 } },
+        physics: false,
+        interaction: { dragNodes: true, zoomView: true, dragView: true },
+        edges: { font: { align: 'top' } }
+    };
+
+    if (clientTopoNetworks[clientName]) {
+        clientTopoNetworks[clientName].setData({ nodes: nodes, edges: edges });
+    } else {
+        clientTopoNetworks[clientName] = new vis.Network(container, { nodes: nodes, edges: edges }, options);
+    }
+}
+
 // ─── Client Status Polling ───────────────────────────────────
 async function pollClientStatus(clientName) {
     try {
@@ -1253,7 +1358,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadRouters(name); clientLoadSourceIps(name);
+        clientLoadRouters(name); clientLoadSourceIps(name); clientRefreshTopology(name);
         switchTab(name);
     }
 }
@@ -1276,7 +1381,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadRouters(name); clientLoadSourceIps(name);
+            clientLoadRouters(name); clientLoadSourceIps(name); clientRefreshTopology(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1287,6 +1392,9 @@ document.addEventListener('DOMContentLoaded', () => {
     loadClients();
     loadFtpFiles();
     pollInterval = setInterval(pollAll, 2000);
+    setInterval(function() {
+        if (activeTab && activeTab !== 'server') clientRefreshTopology(activeTab);
+    }, 30000);
     pollAll();
 });
 </script>
@@ -1623,6 +1731,12 @@ def client_source_ips(name):
         result, code = proxy_to_client(name, '/api/source_ips', 'POST', request.json or {})
     else:
         result, code = proxy_to_client(name, '/api/source_ips')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/topology')
+def client_topology(name):
+    result, code = proxy_to_client(name, '/api/topology')
     return jsonify(result), code
 
 
