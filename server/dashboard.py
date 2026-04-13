@@ -886,10 +886,12 @@ function clientRenderRouterCard(clientName, r) {
             var checked = iface.name === r.selected_interface ? 'checked' : '';
             var stateColor = iface.state === 'up' ? 'var(--success)' : 'var(--danger)';
             var ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
+            var descStr = iface.description ? ' — ' + iface.description : '';
             ifaceRows += '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;cursor:pointer;color:var(--text-primary)">' +
                 '<input type="radio" name="' + prefix + '-iface" value="' + iface.name + '" ' + checked +
                 ' onchange="clientSelectInterface(\'' + clientName + '\',\'' + id + '\',\'' + iface.name + '\')">' +
                 '<strong>' + iface.name + '</strong>' +
+                '<span style="color:var(--text-secondary);font-style:italic">' + descStr + '</span>' +
                 '<span style="color:var(--text-secondary)">' + ipStr + '</span>' +
                 '<span style="color:' + stateColor + ';font-weight:600;font-size:10px">' + iface.state.toUpperCase() + '</span></label>';
         }

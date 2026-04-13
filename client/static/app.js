@@ -438,10 +438,12 @@ function renderRouterCard(r) {
             const checked = iface.name === r.selected_interface ? 'checked' : '';
             const stateColor = iface.state === 'up' ? 'var(--success)' : 'var(--danger)';
             const ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
+            const descStr = iface.description ? ` — ${iface.description}` : '';
             ifaceRows += `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;cursor:pointer;color:var(--text-primary)">
                 <input type="radio" name="rtr-${id}-iface" value="${iface.name}" ${checked}
                     onchange="selectInterface('${id}','${iface.name}')">
                 <strong>${iface.name}</strong>
+                <span style="color:var(--text-secondary);font-style:italic">${descStr}</span>
                 <span style="color:var(--text-secondary)">${ipStr}</span>
                 <span style="color:${stateColor};font-weight:600;font-size:10px">${iface.state.toUpperCase()}</span>
             </label>`;

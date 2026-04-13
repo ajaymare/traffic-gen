@@ -283,15 +283,19 @@ class RouterManager:
                         interfaces[name]['ip_address'] = parts[0]
                         interfaces[name]['subnet'] = '/' + parts[1] if len(parts) > 1 else ''
 
-        # Try to get interface descriptions (ip link show alias)
-        ok, alias_output = self._ssh_exec(router, 'ip -o link show')
+        # Read interface descriptions from ifalias files
+        ok, desc_output = self._ssh_exec(router,
+            'for iface in /sys/class/net/*/ifalias; do '
+            'name=$(basename $(dirname "$iface")); '
+            'desc=$(cat "$iface" 2>/dev/null); '
+            '[ -n "$desc" ] && echo "$name:$desc"; '
+            'done')
         if ok:
-            for line in alias_output.split('\n'):
-                alias_match = re.search(r'^\d+:\s+(\S+?)(?:@\S+)?:.*\\\\alias\s+(.+)', line)
-                if alias_match:
-                    name = alias_match.group(1)
-                    if name in interfaces:
-                        interfaces[name]['description'] = alias_match.group(2).strip()
+            for line in desc_output.split('\n'):
+                if ':' in line:
+                    name, desc = line.split(':', 1)
+                    if name.strip() in interfaces:
+                        interfaces[name.strip()]['description'] = desc.strip()
 
         router.interfaces = list(interfaces.values())
         router.log(f"Discovered {len(router.interfaces)} interfaces")
