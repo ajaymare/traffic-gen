@@ -470,7 +470,7 @@ const PROTOCOLS = {
         { key: 'port', label: 'Port', type: 'number', default: 21 },
         { key: 'username', label: 'Username', type: 'text', default: 'anonymous' },
         { key: 'password', label: 'Password', type: 'password', default: '' },
-        { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin','testfile_1gb.bin'], default: 'testfile_1gb.bin' },
+        { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -714,8 +714,8 @@ async function renderClientTab(name) {
         '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-topo\')"><span>Traffic Topology</span>' +
         '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
         '<button class="btn btn-secondary" onclick="clientRefreshTopology(\'' + name + '\')" style="padding:3px 10px;font-size:10px">Refresh</button>' +
-        '<span class="chevron" id="chevron-c-' + name + '-topo">&#9660;</span></div>' +
-        '</div><div class="card-body" id="section-c-' + name + '-topo">' +
+        '<span class="chevron" id="chevron-c-' + name + '-topo">&#9654;</span></div>' +
+        '</div><div class="card-body" id="section-c-' + name + '-topo" style="display:none">' +
         '<div id="c-' + name + '-topo-container" style="width:100%;height:350px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sub)"></div>' +
         '</div></div>' +
         // Router Link Simulation
@@ -1585,7 +1585,8 @@ def read_json_file(path):
 def get_connections_and_counts():
     """Single ss call returning (connections_list, port_counts_dict)."""
     ports = {
-        80: 'HTTP', 443: 'HTTPS', 5201: 'iperf3',
+        80: 'HTTP', 443: 'HTTPS',
+        5201: 'iperf3', 5202: 'iperf3', 5203: 'iperf3',
         9999: 'HTTP (9999)', 53: 'DNS (53)',
         21: 'FTP', 2222: 'SSH',
     }
@@ -1611,11 +1612,15 @@ def get_connections_and_counts():
             except ValueError:
                 continue
             counts[port_num] = counts.get(port_num, 0) + 1
+            # Convert IPv6-mapped IPv4 (::ffff:10.0.0.1) to plain IPv4
+            remote_display = remote
+            if '::ffff:' in remote_display:
+                remote_display = remote_display.replace('::ffff:', '')
             if port_num in ports:
                 connections.append({
                     'proto': ports[port_num],
                     'local_port': port_num,
-                    'remote': remote,
+                    'remote': remote_display,
                     'state': state,
                 })
     except Exception:
@@ -1702,7 +1707,7 @@ def server_stats():
             }
         },
         'iperf3': {
-            'active_connections': conn_counts.get(5201, 0),
+            'active_connections': conn_counts.get(5201, 0) + conn_counts.get(5202, 0) + conn_counts.get(5203, 0),
             'stats': {}
         },
         'FTP': {
