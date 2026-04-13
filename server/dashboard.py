@@ -43,193 +43,208 @@ DASHBOARD_HTML = r"""
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Traffic Generator — Control Panel</title>
     <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-card: #1a1d27;
+            --bg-card-header: #1e2130;
+            --bg-input: #252836;
+            --bg-hover: #2a2d3a;
+            --bg-sub: #151821;
+            --border: #2d3148;
+            --text-primary: #e4e6eb;
+            --text-secondary: #8b8fa3;
+            --accent: #FA582D;
+            --accent-teal: #00C4B3;
+            --danger: #ef4444;
+            --success: #27ae60;
+        }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f0f2f5; color: #1a1a2e; min-height: 100vh;
+            background: var(--bg-primary); color: var(--text-primary); min-height: 100vh;
         }
         .header {
-            background: linear-gradient(135deg, #1a1a2e, #2d2d44);
-            padding: 16px 24px; border-bottom: 2px solid #FA582D;
+            background: linear-gradient(135deg, #12141c, #1a1d2a);
+            padding: 14px 24px; border-bottom: 2px solid var(--accent);
             display: flex; align-items: center; justify-content: space-between;
         }
-        .header h1 { font-size: 20px; font-weight: 600; color: #FA582D; }
-        .header .status { font-size: 12px; color: #ccc; }
+        .header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+        .header .status { font-size: 11px; color: var(--text-secondary); }
 
         /* Tabs */
         .tab-bar {
-            background: #ffffff; border-bottom: 1px solid #e0e0e0;
+            background: var(--bg-card); border-bottom: 1px solid var(--border);
             display: flex; align-items: center; padding: 0 16px; gap: 0;
-            overflow-x: auto; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            overflow-x: auto;
         }
         .tab {
             padding: 10px 20px; cursor: pointer; font-size: 13px; font-weight: 500;
-            color: #666; border-bottom: 2px solid transparent;
+            color: var(--text-secondary); border-bottom: 2px solid transparent;
             white-space: nowrap; transition: all 0.2s;
         }
-        .tab:hover { color: #1a1a2e; background: #f5f5f5; }
-        .tab.active { color: #FA582D; border-bottom-color: #FA582D; }
-        .tab.server-tab { color: #00C4B3; }
-        .tab.server-tab.active { color: #00C4B3; border-bottom-color: #00C4B3; }
+        .tab:hover { color: var(--text-primary); background: var(--bg-hover); }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab.server-tab { color: var(--accent-teal); }
+        .tab.server-tab.active { color: var(--accent-teal); border-bottom-color: var(--accent-teal); }
         .tab-add {
             padding: 6px 14px; cursor: pointer; font-size: 16px; font-weight: 700;
-            color: #00C4B3; border: 1px solid #00C4B3; border-radius: 4px;
+            color: var(--accent-teal); border: 1px solid var(--accent-teal); border-radius: 4px;
             background: transparent; margin-left: 8px;
         }
-        .tab-add:hover { background: #00C4B3; color: #fff; }
+        .tab-add:hover { background: var(--accent-teal); color: #fff; }
         .tab-content { display: none; }
         .tab-content.active { display: block; }
 
         .container {
-            max-width: 1400px; margin: 0 auto; padding: 20px;
-            display: flex; flex-direction: column; gap: 20px;
+            max-width: 1200px; margin: 0 auto; padding: 16px;
+            display: flex; flex-direction: column; gap: 12px;
         }
         .card {
-            background: #ffffff; border: 1px solid #e0e0e0;
+            background: var(--bg-card); border: 1px solid var(--border);
             border-radius: 8px; overflow: hidden;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
         }
         .card-header {
-            padding: 12px 16px; background: #f7f8fa;
-            font-weight: 600; font-size: 14px; color: #1a1a2e;
+            padding: 10px 14px; background: var(--bg-card-header);
+            font-weight: 600; font-size: 13px; color: var(--text-primary);
             display: flex; align-items: center; justify-content: space-between;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer; user-select: none;
         }
-        .card-body { padding: 16px; }
+        .card-header:hover { background: var(--bg-hover); }
+        .card-body { padding: 12px; }
+        .card-body.collapsed { display: none; }
+        .chevron { font-size: 10px; color: var(--text-secondary); transition: transform 0.2s; margin-left: 8px; }
+        .chevron.collapsed { transform: rotate(-90deg); }
 
         /* Stats */
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .stat-box {
-            background: #f7f8fa; border: 1px solid #e0e0e0;
+            background: var(--bg-sub); border: 1px solid var(--border);
             border-radius: 6px; padding: 10px; text-align: center;
         }
-        .stat-label { font-size: 11px; color: #666; margin-bottom: 4px; }
-        .stat-value { font-size: 16px; font-weight: 700; color: #FA582D; }
-        .stat-value.client-val { color: #00C4B3; }
+        .stat-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .stat-value { font-size: 16px; font-weight: 700; color: var(--accent); }
+        .stat-value.client-val { color: var(--accent-teal); }
 
         /* Services grid */
         .services-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;
         }
         .service-card {
-            background: #f7f8fa; border: 1px solid #e0e0e0;
-            border-radius: 6px; padding: 12px;
+            background: var(--bg-sub); border: 1px solid var(--border);
+            border-radius: 6px; padding: 10px;
         }
         .service-header {
             display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
-        .service-name { font-weight: 600; font-size: 14px; color: #FA582D; text-transform: uppercase; }
-        .service-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; }
-        .service-badge.active { background: #d4f5e9; color: #0d7a4f; }
-        .service-badge.idle { background: #e8e8e8; color: #888; }
+        .service-name { font-weight: 600; font-size: 13px; color: var(--accent); text-transform: uppercase; }
+        .service-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; }
+        .service-badge.active { background: rgba(0,196,179,0.15); color: var(--accent-teal); }
+        .service-badge.idle { background: var(--bg-hover); color: var(--text-secondary); }
         .service-stat {
             display: flex; justify-content: space-between;
-            font-size: 12px; padding: 3px 0; border-bottom: 1px solid #eee;
+            font-size: 11px; padding: 2px 0; border-bottom: 1px solid var(--border);
         }
-        .service-stat-label { color: #888; }
-        .service-stat-value { color: #1a1a2e; font-weight: 500; }
+        .service-stat-label { color: var(--text-secondary); }
+        .service-stat-value { color: var(--text-primary); font-weight: 500; }
 
         /* Connections table */
-        .connections-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .connections-table { width: 100%; border-collapse: collapse; font-size: 11px; }
         .connections-table th {
-            text-align: left; padding: 6px 8px; background: #f7f8fa;
-            color: #666; font-weight: 500; border-bottom: 1px solid #e0e0e0;
+            text-align: left; padding: 5px 8px; background: var(--bg-sub);
+            color: var(--text-secondary); font-weight: 500; border-bottom: 1px solid var(--border);
         }
         .connections-table td {
-            padding: 5px 8px; border-bottom: 1px solid #eee; color: #1a1a2e;
+            padding: 4px 8px; border-bottom: 1px solid var(--border); color: var(--text-primary);
         }
-        .connections-table tr:hover td { background: #f0f2f5; }
+        .connections-table tr:hover td { background: var(--bg-hover); }
 
         /* Protocol cards (client tabs) */
         .protocol-grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px;
         }
         .proto-card {
-            background: #f7f8fa; border: 1px solid #e0e0e0;
-            border-radius: 6px; padding: 12px;
+            background: var(--bg-sub); border: 1px solid var(--border);
+            border-radius: 6px; padding: 10px; transition: border-color 0.15s;
         }
-        .proto-card.running { border-color: #00C4B3; border-width: 2px; }
+        .proto-card.running { border-color: var(--accent-teal); border-width: 2px; }
         .proto-header {
             display: flex; align-items: center; justify-content: space-between;
-            margin-bottom: 10px;
+            cursor: pointer; user-select: none;
         }
         .proto-select { display: flex; align-items: center; gap: 8px; }
-        .proto-checkbox { width: 16px; height: 16px; accent-color: #FA582D; cursor: pointer; }
-        .proto-name { font-weight: 600; font-size: 14px; text-transform: uppercase; color: #1a1a2e; }
-        .proto-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #e8e8e8; color: #888; }
-        .proto-badge.running { background: #d4f5e9; color: #0d7a4f; }
-        .proto-badge.countdown { background: #fff3e0; color: #e65100; font-variant-numeric: tabular-nums; }
-        .proto-fields { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+        .proto-checkbox { width: 14px; height: 14px; accent-color: var(--accent); cursor: pointer; }
+        .proto-name { font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--text-primary); }
+        .proto-header-right { display: flex; align-items: center; gap: 6px; }
+        .proto-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: var(--bg-hover); color: var(--text-secondary); }
+        .proto-badge.running { background: rgba(0,196,179,0.15); color: var(--accent-teal); }
+        .proto-badge.countdown { background: rgba(250,88,45,0.15); color: var(--accent); font-variant-numeric: tabular-nums; }
+        .proto-details { margin-top: 10px; }
+        .proto-fields { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
         .field-row { display: flex; align-items: center; gap: 8px; }
-        .field-row label { font-size: 12px; color: #666; min-width: 90px; }
+        .field-row label { font-size: 11px; color: var(--text-secondary); min-width: 85px; }
         .field-row input, .field-row select {
-            flex: 1; padding: 4px 8px; background: #ffffff;
-            border: 1px solid #d0d0d0; border-radius: 4px;
-            color: #1a1a2e; font-size: 12px;
+            flex: 1; padding: 4px 8px; background: var(--bg-input);
+            border: 1px solid var(--border); border-radius: 4px;
+            color: var(--text-primary); font-size: 12px;
         }
-        .field-row input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #FA582D; }
-        .proto-actions { display: flex; gap: 6px; }
+        .field-row input:focus, .field-row select:focus { outline: none; border-color: var(--accent-teal); }
+        .field-row input[type="checkbox"] { flex: none; width: 14px; height: 14px; accent-color: var(--accent); }
+        .proto-actions { display: flex; gap: 6px; align-items: center; }
         .bulk-actions { display: flex; gap: 6px; }
-
-        /* Shaping */
-        .shaping-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-        .slider-group { display: flex; flex-direction: column; gap: 4px; }
-        .slider-group label {
-            font-size: 12px; color: #666;
-            display: flex; justify-content: space-between;
-        }
-        .slider-group input[type="range"] { width: 100%; accent-color: #FA582D; }
-        .slider-value { color: #FA582D; font-weight: 600; }
-        .shaping-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 12px; }
+        .advanced-toggle { font-size: 11px; color: var(--accent); cursor: pointer; padding: 4px 0; margin: 2px 0; display: inline-block; }
+        .advanced-toggle:hover { text-decoration: underline; }
 
         /* Buttons */
         .btn {
-            padding: 6px 14px; border: none; border-radius: 4px;
-            cursor: pointer; font-size: 12px; font-weight: 500;
+            padding: 5px 12px; border: none; border-radius: 4px;
+            cursor: pointer; font-size: 11px; font-weight: 500;
+            transition: background 0.15s, opacity 0.15s;
         }
-        .btn-start { background: #00C4B3; color: #fff; }
+        .btn:active { opacity: 0.8; }
+        .btn-start { background: var(--accent-teal); color: #fff; }
         .btn-start:hover { background: #00a89a; }
-        .btn-stop { background: #ef4444; color: #fff; }
+        .btn-stop { background: var(--danger); color: #fff; }
         .btn-stop:hover { background: #dc2626; }
-        .btn-primary { background: #FA582D; color: #fff; }
+        .btn-primary { background: var(--accent); color: #fff; }
         .btn-primary:hover { background: #e04a20; }
-        .btn-secondary { background: #e0e0e0; color: #1a1a2e; }
-        .btn-secondary:hover { background: #d0d0d0; }
-        .btn-danger { background: #ef4444; color: #fff; }
+        .btn-secondary { background: var(--bg-hover); color: var(--text-primary); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: #353849; }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .btn-danger:hover { background: #dc2626; }
 
         /* Log panel */
         .log-panel {
-            background: #1a1a2e; border: 1px solid #e0e0e0; border-radius: 4px;
+            background: var(--bg-sub); border: 1px solid var(--border); border-radius: 4px;
             padding: 8px; font-family: 'Monaco', 'Menlo', monospace;
-            font-size: 11px; max-height: 300px; overflow-y: auto; line-height: 1.6;
+            font-size: 11px; max-height: 250px; overflow-y: auto; line-height: 1.5;
         }
-        .log-entry { color: #b0b8c8; white-space: pre-wrap; word-break: break-all; }
-        .log-entry.error { color: #ef4444; }
+        .log-entry { color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; }
+        .log-entry.error { color: var(--danger); }
 
         /* Modal */
         .modal-overlay {
             display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.4); z-index: 100; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center;
         }
         .modal-overlay.show { display: flex; }
         .modal {
-            background: #ffffff; border: 1px solid #e0e0e0; border-radius: 8px;
+            background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
             padding: 24px; width: 400px; max-width: 90vw;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         }
-        .modal h3 { margin-bottom: 16px; color: #FA582D; }
+        .modal h3 { margin-bottom: 16px; color: var(--accent); }
         .modal-field { margin-bottom: 12px; }
-        .modal-field label { display: block; font-size: 12px; color: #666; margin-bottom: 4px; }
+        .modal-field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
         .modal-field input {
-            width: 100%; padding: 8px; background: #f7f8fa; border: 1px solid #d0d0d0;
-            border-radius: 4px; color: #1a1a2e; font-size: 13px;
+            width: 100%; padding: 8px; background: var(--bg-input); border: 1px solid var(--border);
+            border-radius: 4px; color: var(--text-primary); font-size: 13px;
         }
         .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
 
         @media (max-width: 900px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .shaping-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
@@ -250,8 +265,11 @@ DASHBOARD_HTML = r"""
 <div class="tab-content active" id="tab-server">
 <div class="container">
     <div class="card">
-        <div class="card-header">Aggregate Traffic</div>
-        <div class="card-body">
+        <div class="card-header" onclick="toggleSection('srv-stats')">
+            <span>Aggregate Traffic</span>
+            <span class="chevron" id="chevron-srv-stats">&#9660;</span>
+        </div>
+        <div class="card-body" id="section-srv-stats">
             <div class="stats-grid">
                 <div class="stat-box"><div class="stat-label">Total Bytes Received</div><div class="stat-value" id="total-recv">0 B</div></div>
                 <div class="stat-box"><div class="stat-label">Total Bytes Sent</div><div class="stat-value" id="total-sent">0 B</div></div>
@@ -261,36 +279,45 @@ DASHBOARD_HTML = r"""
         </div>
     </div>
     <div class="card">
-        <div class="card-header">
-            Services
-            <button class="btn btn-danger" onclick="restartAllServices()" style="padding:4px 12px;font-size:12px">Restart All</button>
+        <div class="card-header" onclick="toggleSection('srv-services')">
+            <span>Services</span>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <button class="btn btn-danger" onclick="restartAllServices()" style="padding:3px 10px;font-size:10px">Restart All</button>
+                <span class="chevron" id="chevron-srv-services">&#9660;</span>
+            </div>
         </div>
-        <div class="card-body"><div class="services-grid" id="services-grid"></div></div>
+        <div class="card-body" id="section-srv-services"><div class="services-grid" id="services-grid"></div></div>
     </div>
     <div class="card">
-        <div class="card-header">Active Connections</div>
-        <div class="card-body">
+        <div class="card-header" onclick="toggleSection('srv-conns')">
+            <span>Active Connections</span>
+            <span class="chevron collapsed" id="chevron-srv-conns">&#9660;</span>
+        </div>
+        <div class="card-body collapsed" id="section-srv-conns">
             <table class="connections-table">
                 <thead><tr><th>Protocol</th><th>Local Port</th><th>Remote Address</th><th>State</th></tr></thead>
                 <tbody id="conn-table-body">
-                    <tr><td colspan="4" style="text-align:center;color:#94a3b8">Loading...</td></tr>
+                    <tr><td colspan="4" style="text-align:center;color:var(--text-secondary)">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
     <div class="card">
-        <div class="card-header">
+        <div class="card-header" onclick="toggleSection('srv-ftp')">
             <span>FTP Files</span>
-            <label class="btn btn-start" style="cursor:pointer;margin:0">
-                Upload File <input type="file" id="ftp-upload-input" style="display:none" onchange="uploadFtpFile()">
-            </label>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <label class="btn btn-start" style="cursor:pointer;margin:0;padding:3px 10px;font-size:10px">
+                    Upload <input type="file" id="ftp-upload-input" style="display:none" onchange="uploadFtpFile()">
+                </label>
+                <span class="chevron collapsed" id="chevron-srv-ftp">&#9660;</span>
+            </div>
         </div>
-        <div class="card-body">
-            <div id="upload-status" style="display:none;padding:8px;margin-bottom:8px;border-radius:4px;background:#065f46;color:#6ee7b7"></div>
+        <div class="card-body collapsed" id="section-srv-ftp">
+            <div id="upload-status" style="display:none;padding:6px;margin-bottom:6px;border-radius:4px;background:rgba(0,196,179,0.15);color:var(--accent-teal);font-size:11px"></div>
             <table class="connections-table">
                 <thead><tr><th>Filename</th><th>Size</th><th>Action</th></tr></thead>
                 <tbody id="ftp-files-body">
-                    <tr><td colspan="3" style="text-align:center;color:#94a3b8">Loading...</td></tr>
+                    <tr><td colspan="3" style="text-align:center;color:var(--text-secondary)">Loading...</td></tr>
                 </tbody>
             </table>
         </div>
@@ -318,8 +345,30 @@ DASHBOARD_HTML = r"""
 </div>
 
 <script>
+// ─── Section Toggle ──────────────────────────────────────────
+function toggleSection(name) {
+    var body = document.getElementById('section-' + name);
+    var chevron = document.getElementById('chevron-' + name);
+    if (!body) return;
+    body.classList.toggle('collapsed');
+    if (chevron) chevron.classList.toggle('collapsed');
+}
+function toggleProtoDetails(clientName, proto) {
+    var el = document.getElementById('c-' + clientName + '-details-' + proto);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function toggleAdvanced(clientName, proto) {
+    var el = document.getElementById('c-' + clientName + '-adv-' + proto);
+    var toggle = document.getElementById('c-' + clientName + '-adv-toggle-' + proto);
+    if (el) {
+        var show = el.style.display === 'none';
+        el.style.display = show ? 'block' : 'none';
+        if (toggle) toggle.textContent = show ? 'Advanced Settings \u25BE' : 'Advanced Settings \u25B8';
+    }
+}
 // ─── Protocol Definitions ────────────────────────────────────
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
+const ADVANCED_KEYS = ['dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
 
 const PROTOCOLS = {
     https: { name: 'HTTPS', fields: [
@@ -526,7 +575,6 @@ async function renderClientTab(name) {
     const existing = document.getElementById('tab-' + name);
     if (existing) return;
 
-    // Fetch the client's SERVER_HOST so defaults point to the right server
     let serverHost = 'server';
     try {
         const resp = await fetch('/api/client/' + name + '/server_host');
@@ -538,14 +586,18 @@ async function renderClientTab(name) {
     div.className = 'tab-content';
     div.id = 'tab-' + name;
 
+    const inputStyle = 'padding:4px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px';
+
     let protoCardsHtml = '';
     for (const [proto, def] of Object.entries(PROTOCOLS)) {
-        let fieldsHtml = '';
+        let basicHtml = '';
+        let advancedHtml = '';
+        let hasAdvanced = false;
         for (const f of def.fields) {
-            if (f.key === 'flows') continue; // rendered in proto-actions
+            if (f.key === 'flows') continue;
+            const isAdv = ADVANCED_KEYS.includes(f.key);
             let input;
             const id = 'c-' + name + '-' + proto + '-' + f.key;
-            // Replace 'server' in defaults with client's actual server host
             let defVal = f.default;
             if (typeof defVal === 'string') defVal = defVal.replace(/server/g, serverHost);
             if (f.type === 'select') {
@@ -553,40 +605,49 @@ async function renderClientTab(name) {
                     '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>').join('');
                 input = '<select id="' + id + '">' + opts + '</select>';
             } else if (f.type === 'textarea') {
-                input = '<textarea id="' + id + '" rows="3" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;resize:vertical;font-family:inherit">' + defVal + '</textarea>';
+                input = '<textarea id="' + id + '" rows="3" style="width:100%;' + inputStyle + ';resize:vertical;font-family:inherit">' + defVal + '</textarea>';
             } else if (f.type === 'checkbox') {
                 input = '<input type="checkbox" id="' + id + '"' + (f.default ? ' checked' : '') + '>';
             } else {
                 const step = f.step ? ' step="' + f.step + '"' : '';
                 input = '<input type="' + f.type + '" id="' + id + '" value="' + defVal + '"' + step + '>';
             }
-            fieldsHtml += '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
+            const row = '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
+            if (isAdv) { advancedHtml += row; hasAdvanced = true; }
+            else basicHtml += row;
+        }
+        let advSection = '';
+        if (hasAdvanced) {
+            advSection = '<div class="advanced-toggle" id="c-' + name + '-adv-toggle-' + proto + '" onclick="event.stopPropagation();toggleAdvanced(\'' + name + '\',\'' + proto + '\')">Advanced Settings \u25B8</div>' +
+                '<div id="c-' + name + '-adv-' + proto + '" style="display:none">' + advancedHtml + '</div>';
         }
         protoCardsHtml += '<div class="proto-card" id="c-' + name + '-proto-' + proto + '">' +
-            '<div class="proto-header"><span class="proto-select">' +
+            '<div class="proto-header" onclick="toggleProtoDetails(\'' + name + '\',\'' + proto + '\')">' +
+            '<span class="proto-select" onclick="event.stopPropagation()">' +
             '<input type="checkbox" id="c-' + name + '-select-' + proto + '" class="proto-checkbox">' +
             '<span class="proto-name">' + def.name + '</span></span>' +
-            '<span><span class="proto-badge" id="c-' + name + '-status-' + proto + '">Stopped</span>' +
+            '<span class="proto-header-right">' +
+            '<span class="proto-badge" id="c-' + name + '-status-' + proto + '">Stopped</span>' +
             '<span class="proto-badge countdown" id="c-' + name + '-timer-' + proto + '" style="display:none"></span>' +
+            '<button class="btn btn-start" onclick="event.stopPropagation();clientStartProto(\'' + name + '\',\'' + proto + '\')" style="padding:3px 10px;font-size:10px">Start</button>' +
+            '<button class="btn btn-stop" onclick="event.stopPropagation();clientStopProto(\'' + name + '\',\'' + proto + '\')" style="padding:3px 10px;font-size:10px">Stop</button>' +
             '</span></div>' +
-            '<div class="proto-fields">' + fieldsHtml + '</div>' +
-            '<div class="proto-actions">' +
-            '<button class="btn btn-start" onclick="clientStartProto(\'' + name + '\',\'' + proto + '\')">Start</button>' +
-            '<button class="btn btn-stop" onclick="clientStopProto(\'' + name + '\',\'' + proto + '\')">Stop</button>' +
-            '<label style="font-size:11px;color:#666;display:flex;align-items:center;gap:4px;margin-left:8px">' +
-            'Flows <input type="number" id="c-' + name + '-' + proto + '-flows" value="1" min="1" max="20" style="width:45px;padding:2px 4px;font-size:11px">' +
-            '</label>' +
-            '</div></div>';
+            '<div class="proto-details" id="c-' + name + '-details-' + proto + '" style="display:none">' +
+            '<div class="proto-fields">' + basicHtml + '</div>' +
+            advSection +
+            '<div class="proto-actions" style="margin-top:6px">' +
+            '<label style="font-size:10px;color:var(--text-secondary);display:flex;align-items:center;gap:4px">' +
+            'Flows <input type="number" id="c-' + name + '-' + proto + '-flows" value="1" min="1" max="20" style="width:42px;' + inputStyle + '">' +
+            '</label></div></div></div>';
     }
 
     div.innerHTML = '<div class="container">' +
-        // Client header with remove button
         '<div class="card"><div class="card-header">' +
         '<span>Client: ' + name + ' (' + clientList[name] + ')</span>' +
         '<button class="btn btn-danger" onclick="removeClient(\'' + name + '\')">Remove Client</button>' +
         '</div></div>' +
         // Stats
-        '<div class="card"><div class="card-header">Live Statistics</div><div class="card-body">' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-stats\')"><span>Live Statistics</span><span class="chevron" id="chevron-c-' + name + '-stats">&#9660;</span></div><div class="card-body" id="section-c-' + name + '-stats">' +
         '<div class="stats-grid">' +
         '<div class="stat-box"><div class="stat-label">Bytes Sent</div><div class="stat-value client-val" id="c-' + name + '-sent">0 B</div></div>' +
         '<div class="stat-box"><div class="stat-label">Bytes Received</div><div class="stat-value client-val" id="c-' + name + '-recv">0 B</div></div>' +
@@ -594,52 +655,54 @@ async function renderClientTab(name) {
         '<div class="stat-box"><div class="stat-label">Errors</div><div class="stat-value client-val" id="c-' + name + '-errors">0</div></div>' +
         '</div></div></div>' +
         // Router Link Simulation
-        '<div class="card"><div class="card-header">Link Simulation — Routers</div><div class="card-body">' +
-        // Add Router Form
-        '<div style="margin-bottom:16px;padding:12px;background:#f0f2f5;border-radius:8px">' +
-        '<label style="font-size:12px;font-weight:600;margin-bottom:8px;display:block">Add Router</label>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
-        '<input type="text" id="c-' + name + '-router-add-name" placeholder="Name" style="width:120px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<input type="text" id="c-' + name + '-router-add-ip" placeholder="Router IP" style="width:140px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<input type="text" id="c-' + name + '-router-add-user" placeholder="Username" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<input type="password" id="c-' + name + '-router-add-pass" placeholder="Password" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<button class="btn btn-start" onclick="clientAddRouter(\'' + name + '\')">Add Router</button>' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-routers\')"><span>Link Simulation — Routers</span><span class="chevron" id="chevron-c-' + name + '-routers">&#9660;</span></div><div class="card-body" id="section-c-' + name + '-routers">' +
+        '<div style="margin-bottom:12px;padding:10px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">' +
+        '<label style="font-size:11px;font-weight:600;margin-bottom:6px;display:block;color:var(--text-secondary)">Add Router</label>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">' +
+        '<input type="text" id="c-' + name + '-router-add-name" placeholder="Name" style="width:110px;' + inputStyle + '">' +
+        '<input type="text" id="c-' + name + '-router-add-ip" placeholder="Router IP" style="width:130px;' + inputStyle + '">' +
+        '<input type="text" id="c-' + name + '-router-add-user" placeholder="Username" style="width:100px;' + inputStyle + '">' +
+        '<input type="password" id="c-' + name + '-router-add-pass" placeholder="Password" style="width:100px;' + inputStyle + '">' +
+        '<button class="btn btn-start" onclick="clientAddRouter(\'' + name + '\')">Add</button>' +
         '</div>' +
-        '<div id="c-' + name + '-router-add-error" style="display:none;margin-top:6px;font-size:12px;color:#ef4444"></div>' +
+        '<div id="c-' + name + '-router-add-error" style="display:none;margin-top:4px;font-size:11px;color:var(--danger)"></div>' +
         '</div>' +
         '<div id="c-' + name + '-router-cards-container"></div>' +
         '</div></div>' +
         // Source IPs
-        '<div class="card"><div class="card-header">Source IP Simulation</div><div class="card-body">' +
-        '<div style="padding:10px;background:#f0f2f5;border-radius:8px">' +
-        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-srcip\')"><span>Source IP Simulation</span><span class="chevron collapsed" id="chevron-c-' + name + '-srcip">&#9660;</span></div><div class="card-body collapsed" id="section-c-' + name + '-srcip">' +
+        '<div style="padding:8px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">' +
+        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
         '<input type="checkbox" id="c-' + name + '-source-ip-toggle" onchange="clientToggleSourceIp(\'' + name + '\')">' +
-        '<strong>Random Source IPs</strong> (simulate multiple clients)</label>' +
-        '<div id="c-' + name + '-source-ip-config" style="display:none;margin-top:8px">' +
+        '<strong style="font-size:12px">Random Source IPs</strong> <span style="font-size:11px;color:var(--text-secondary)">(simulate multiple clients)</span></label>' +
+        '<div id="c-' + name + '-source-ip-config" style="display:none;margin-top:6px">' +
         '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' +
-        '<label style="font-size:12px">Base IP</label>' +
-        '<input type="text" id="c-' + name + '-source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<label style="font-size:12px">Count</label>' +
-        '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">' +
-        '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
-        '</div><div id="c-' + name + '-source-ip-list" style="margin-top:8px;font-size:11px;color:#94a3b8"></div></div>' +
+        '<label style="font-size:11px;color:var(--text-secondary)">Base IP</label>' +
+        '<input type="text" id="c-' + name + '-source-ip-base" value="172.18.0.100" style="width:130px;' + inputStyle + '">' +
+        '<label style="font-size:11px;color:var(--text-secondary)">Count</label>' +
+        '<input type="number" id="c-' + name + '-source-ip-count" value="5" min="1" max="50" style="width:55px;' + inputStyle + '">' +
+        '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 10px">Apply</button>' +
+        '</div><div id="c-' + name + '-source-ip-list" style="margin-top:6px;font-size:10px;color:var(--text-secondary)"></div></div>' +
         '</div></div></div>' +
         // Protocol cards
-        '<div class="card"><div class="card-header"><span>Traffic Generators</span>' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-protos\')"><span>Traffic Generators</span>' +
+        '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
         '<div class="bulk-actions">' +
         '<button class="btn btn-secondary" onclick="clientSelectAll(\'' + name + '\')">Select All</button>' +
-        '<button class="btn btn-secondary" onclick="clientDeselectAll(\'' + name + '\')">Deselect All</button>' +
+        '<button class="btn btn-secondary" onclick="clientDeselectAll(\'' + name + '\')">Deselect</button>' +
         '<button class="btn btn-start" onclick="clientStartSelected(\'' + name + '\')">Start Selected</button>' +
         '<button class="btn btn-stop" onclick="clientStopSelected(\'' + name + '\')">Stop Selected</button>' +
         '<button class="btn btn-danger" onclick="clientStopAll(\'' + name + '\')">Stop All</button>' +
-        '</div></div><div class="card-body"><div class="protocol-grid">' + protoCardsHtml + '</div></div></div>' +
+        '</div><span class="chevron" id="chevron-c-' + name + '-protos">&#9660;</span></div>' +
+        '</div><div class="card-body" id="section-c-' + name + '-protos"><div class="protocol-grid">' + protoCardsHtml + '</div></div></div>' +
         // Log
-        '<div class="card"><div class="card-header">Activity Log ' +
-        '<div style="display:flex;align-items:center;gap:8px">' +
-        '<label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;cursor:pointer">' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-logs\')"><span>Activity Log</span>' +
+        '<div style="display:flex;align-items:center;gap:8px" onclick="event.stopPropagation()">' +
+        '<label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:normal;cursor:pointer;color:var(--text-secondary)">' +
         '<input type="checkbox" id="auto-refresh-' + name + '" checked onchange="toggleAutoRefresh()"> Auto-refresh</label>' +
         '<button class="btn btn-secondary" onclick="clientLogs[\'' + name + '\']=[];document.getElementById(\'log-' + name + '\').innerHTML=\'\'">Clear</button>' +
-        '</div></div><div class="card-body"><div class="log-panel" id="log-' + name + '"></div></div></div>' +
+        '<span class="chevron collapsed" id="chevron-c-' + name + '-logs">&#9660;</span></div>' +
+        '</div><div class="card-body collapsed" id="section-c-' + name + '-logs"><div class="log-panel" id="log-' + name + '"></div></div></div>' +
         '</div>';
 
     document.body.appendChild(div);
@@ -801,81 +864,88 @@ async function clientApplyRouterMode(clientName, rid, mode) {
     clientLoadRouters(clientName);
 }
 
+function clientToggleRouterInterfaces(clientName, rid) {
+    var el = document.getElementById('c-' + clientName + '-rtr-ifaces-' + rid);
+    var toggle = document.getElementById('c-' + clientName + '-rtr-ifaces-toggle-' + rid);
+    if (el) {
+        var show = el.style.display === 'none';
+        el.style.display = show ? 'block' : 'none';
+        if (toggle) toggle.textContent = show ? 'Hide Interfaces' : 'Show Interfaces';
+    }
+}
 function clientRenderRouterCard(clientName, r) {
     var id = r.router_id;
     var prefix = 'c-' + clientName + '-rtr-' + id;
-    var connColor = r.connected ? '#27ae60' : '#e74c3c';
+    var connColor = r.connected ? 'var(--success)' : 'var(--danger)';
     var connText = r.connected ? 'Connected' : 'Disconnected';
+    var selectedIfaceDisplay = r.selected_interface || 'None';
     var ifaceRows = '';
     if (r.interfaces && r.interfaces.length) {
         for (var i = 0; i < r.interfaces.length; i++) {
             var iface = r.interfaces[i];
             var checked = iface.name === r.selected_interface ? 'checked' : '';
-            var stateColor = iface.state === 'up' ? '#27ae60' : '#e74c3c';
+            var stateColor = iface.state === 'up' ? 'var(--success)' : 'var(--danger)';
             var ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
-            var descStr = iface.description ? ' — ' + iface.description : '';
-            ifaceRows += '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">' +
+            ifaceRows += '<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;cursor:pointer;color:var(--text-primary)">' +
                 '<input type="radio" name="' + prefix + '-iface" value="' + iface.name + '" ' + checked +
                 ' onchange="clientSelectInterface(\'' + clientName + '\',\'' + id + '\',\'' + iface.name + '\')">' +
                 '<strong>' + iface.name + '</strong>' +
-                '<span style="color:#666">' + ipStr + descStr + '</span>' +
-                '<span style="color:' + stateColor + ';font-weight:600;font-size:11px">' + iface.state.toUpperCase() + '</span></label>';
+                '<span style="color:var(--text-secondary)">' + ipStr + '</span>' +
+                '<span style="color:' + stateColor + ';font-weight:600;font-size:10px">' + iface.state.toUpperCase() + '</span></label>';
         }
     } else {
-        ifaceRows = '<div style="color:#888;font-size:12px">No interfaces discovered</div>';
+        ifaceRows = '<div style="color:var(--text-secondary);font-size:11px">No interfaces discovered</div>';
     }
     var modeHtml = '';
     if (r.current_mode === 'healthy') {
-        modeHtml = '<div style="padding:8px 12px;background:#eafaf1;border:2px solid #27ae60;border-radius:8px;font-size:13px;margin-bottom:12px">' +
-            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:6px"></span>' +
-            '<strong style="color:#1e8449">HEALTHY</strong> — ' + (r.selected_interface || '?') + ' up, no impairment</div>';
+        modeHtml = '<div style="padding:6px 10px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);border-radius:6px;font-size:12px;margin-bottom:8px;color:var(--success)">' +
+            '<strong>HEALTHY</strong> — ' + (r.selected_interface || '?') + ' up, no impairment</div>';
     } else if (r.current_mode === 'impaired') {
         var cfg = r.impairment_config || {};
         var parts = [];
-        if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
-        if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
-        if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
-        if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
-        modeHtml = '<div style="padding:8px 12px;background:#fdecea;border:2px solid #e74c3c;border-radius:8px;font-size:13px;margin-bottom:12px">' +
-            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:6px"></span>' +
-            '<strong style="color:#c0392b">IMPAIRED</strong> — ' + (r.selected_interface || '?') + ' | ' + (parts.join(' | ') || 'custom') + '</div>';
+        if (cfg.latency_ms) parts.push(cfg.latency_ms + 'ms latency');
+        if (cfg.jitter_ms) parts.push(cfg.jitter_ms + 'ms jitter');
+        if (cfg.packet_loss_pct) parts.push(cfg.packet_loss_pct + '% loss');
+        if (cfg.bandwidth_mbps) parts.push(cfg.bandwidth_mbps + ' Mbps');
+        modeHtml = '<div style="padding:6px 10px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;font-size:12px;margin-bottom:8px;color:var(--danger)">' +
+            '<strong>IMPAIRED</strong> — ' + (r.selected_interface || '?') + ' | ' + (parts.join(', ') || 'custom') + '</div>';
     } else if (r.current_mode === 'link_down') {
-        modeHtml = '<div style="padding:8px 12px;background:#1a1a2e;border:2px solid #ef4444;border-radius:8px;font-size:13px;margin-bottom:12px;color:#fff">' +
-            '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:6px"></span>' +
+        modeHtml = '<div style="padding:6px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-size:12px;margin-bottom:8px;color:#ff6b6b">' +
             '<strong>LINK DOWN</strong> — ' + (r.selected_interface || '?') + ' is shut down</div>';
     }
+    var inputStyle = 'width:60px;padding:3px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px';
     var connectedContent = r.connected ?
-        '<div style="margin-bottom:12px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">' +
-        '<label style="font-size:12px;font-weight:600">Interfaces</label>' +
-        '<button class="btn btn-secondary" onclick="clientRefreshInterfaces(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 10px;font-size:11px">Refresh</button></div>' +
-        '<div style="padding:6px 10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">' + ifaceRows + '</div></div>' +
-        '<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Presets</label>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:6px">' +
-        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'degraded_wan\')" style="padding:3px 10px;font-size:11px">Degraded WAN</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'voice_sla\')" style="padding:3px 10px;font-size:11px">Voice SLA</button>' +
-        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'video_sla\')" style="padding:3px 10px;font-size:11px">Video SLA</button></div></div>' +
-        '<div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Impairment Values</label>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">' +
-        '<label style="font-size:12px">Latency</label><input type="number" id="' + prefix + '-latency" value="' + ((r.impairment_config||{}).latency_ms||0) + '" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
-        '<label style="font-size:12px;margin-left:6px">Jitter</label><input type="number" id="' + prefix + '-jitter" value="' + ((r.impairment_config||{}).jitter_ms||0) + '" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>' +
-        '<label style="font-size:12px;margin-left:6px">Loss</label><input type="number" id="' + prefix + '-loss" value="' + ((r.impairment_config||{}).packet_loss_pct||0) + '" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>' +
-        '<label style="font-size:12px;margin-left:6px">BW</label><input type="number" id="' + prefix + '-bw" value="' + ((r.impairment_config||{}).bandwidth_mbps||0) + '" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps</span></div></div>' +
         modeHtml +
-        '<div style="display:flex;gap:8px">' +
-        '<button class="btn btn-start" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'healthy\')" style="padding:6px 16px">Healthy</button>' +
-        '<button class="btn btn-primary" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'impaired\')" style="padding:6px 16px">Apply Impaired</button>' +
-        '<button class="btn btn-danger" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'link_down\')" style="padding:6px 16px">Link Down</button></div>'
-        : '<div style="color:#888;font-size:12px;padding:8px 0">Router disconnected. Click Reconnect to restore.</div>';
-    return '<div style="background:#f7f8fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:12px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
-        '<div style="display:flex;align-items:center;gap:10px">' +
-        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + connColor + '"></span>' +
-        '<strong style="font-size:14px">' + r.name + '</strong>' +
-        '<span style="color:#666;font-size:12px">' + r.ip + '</span>' +
-        '<span style="color:' + connColor + ';font-size:11px;font-weight:600">' + connText + '</span></div>' +
+        '<div style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+        '<span style="font-size:11px;color:var(--text-secondary)">Interface: <strong style="color:var(--text-primary)">' + selectedIfaceDisplay + '</strong></span>' +
+        '<button class="btn btn-secondary" id="c-' + clientName + '-rtr-ifaces-toggle-' + id + '" onclick="clientToggleRouterInterfaces(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 8px;font-size:10px">Show Interfaces</button>' +
+        '<button class="btn btn-secondary" onclick="clientRefreshInterfaces(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 8px;font-size:10px">Refresh</button></div>' +
+        '<div id="c-' + clientName + '-rtr-ifaces-' + id + '" style="display:none;padding:6px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;margin-top:4px">' + ifaceRows + '</div></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">' +
+        '<span style="font-size:10px;color:var(--text-secondary)">Presets:</span>' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'degraded_wan\')" style="padding:2px 8px;font-size:10px">Degraded WAN</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'voice_sla\')" style="padding:2px 8px;font-size:10px">Voice SLA</button>' +
+        '<button class="btn btn-secondary" onclick="clientApplyRouterPreset(\'' + clientName + '\',\'' + id + '\',\'video_sla\')" style="padding:2px 8px;font-size:10px">Video SLA</button></div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">' +
+        '<label style="font-size:10px;color:var(--text-secondary)">Latency</label><input type="number" id="' + prefix + '-latency" value="' + ((r.impairment_config||{}).latency_ms||0) + '" min="0" max="5000" style="' + inputStyle + '"><span style="font-size:10px;color:var(--text-secondary)">ms</span>' +
+        '<label style="font-size:10px;color:var(--text-secondary);margin-left:4px">Jitter</label><input type="number" id="' + prefix + '-jitter" value="' + ((r.impairment_config||{}).jitter_ms||0) + '" min="0" max="2000" style="' + inputStyle + '"><span style="font-size:10px;color:var(--text-secondary)">ms</span>' +
+        '<label style="font-size:10px;color:var(--text-secondary);margin-left:4px">Loss</label><input type="number" id="' + prefix + '-loss" value="' + ((r.impairment_config||{}).packet_loss_pct||0) + '" min="0" max="100" step="0.5" style="' + inputStyle + '"><span style="font-size:10px;color:var(--text-secondary)">%</span>' +
+        '<label style="font-size:10px;color:var(--text-secondary);margin-left:4px">BW</label><input type="number" id="' + prefix + '-bw" value="' + ((r.impairment_config||{}).bandwidth_mbps||0) + '" min="0" max="10000" step="10" style="width:70px;padding:3px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px"><span style="font-size:10px;color:var(--text-secondary)">Mbps</span></div>' +
         '<div style="display:flex;gap:6px">' +
-        (!r.connected ? '<button class="btn btn-start" onclick="clientReconnectRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:3px 10px;font-size:11px">Reconnect</button>' : '') +
-        '<button class="btn btn-danger" onclick="clientRemoveRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:3px 10px;font-size:11px">Remove</button></div></div>' +
+        '<button class="btn btn-start" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'healthy\')" style="padding:4px 12px;font-size:11px">Healthy</button>' +
+        '<button class="btn btn-primary" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'impaired\')" style="padding:4px 12px;font-size:11px">Apply Impaired</button>' +
+        '<button class="btn btn-danger" onclick="clientApplyRouterMode(\'' + clientName + '\',\'' + id + '\',\'link_down\')" style="padding:4px 12px;font-size:11px">Link Down</button></div>'
+        : '<div style="color:var(--text-secondary);font-size:11px;padding:6px 0">Router disconnected. Click Reconnect to restore.</div>';
+    return '<div style="background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">' +
+        '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + connColor + '"></span>' +
+        '<strong style="font-size:13px;color:var(--text-primary)">' + r.name + '</strong>' +
+        '<span style="color:var(--text-secondary);font-size:11px">' + r.ip + '</span>' +
+        '<span style="color:' + connColor + ';font-size:10px;font-weight:600">' + connText + '</span></div>' +
+        '<div style="display:flex;gap:4px">' +
+        (!r.connected ? '<button class="btn btn-start" onclick="clientReconnectRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 8px;font-size:10px">Reconnect</button>' : '') +
+        '<button class="btn btn-danger" onclick="clientRemoveRouter(\'' + clientName + '\',\'' + id + '\')" style="padding:2px 8px;font-size:10px">Remove</button></div></div>' +
         connectedContent + '</div>';
 }
 
@@ -886,7 +956,7 @@ async function clientLoadRouters(clientName) {
         const container = document.getElementById('c-' + clientName + '-router-cards-container');
         if (!container) return;
         if (!routers.length) {
-            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:12px">No routers added. Add a router above to start link simulation.</div>';
             return;
         }
         container.innerHTML = routers.map(function(r) { return clientRenderRouterCard(clientName, r); }).join('');
@@ -900,7 +970,7 @@ async function clientPollRouterStatus(clientName) {
         const container = document.getElementById('c-' + clientName + '-router-cards-container');
         if (!container) return;
         if (!routers.length) {
-            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:12px">No routers added. Add a router above to start link simulation.</div>';
             return;
         }
         // Preserve impairment input values during re-render

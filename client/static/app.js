@@ -1,6 +1,7 @@
 const SRV = (typeof SERVER_HOST !== 'undefined') ? SERVER_HOST : 'server';
 
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
+const ADVANCED_KEYS = ['dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
 
 const PROTOCOLS = {
     https: {
@@ -145,6 +146,33 @@ const PROTOCOLS = {
     },
 };
 
+// ─── Section Toggle ─────────────────────────────────────────
+
+function toggleSection(name) {
+    const body = document.getElementById('section-' + name);
+    const chevron = document.getElementById('chevron-' + name);
+    if (!body) return;
+    body.classList.toggle('collapsed');
+    if (chevron) chevron.classList.toggle('collapsed');
+}
+
+// ─── Protocol Card Toggle ───────────────────────────────────
+
+function toggleProtoDetails(proto) {
+    const el = document.getElementById('details-' + proto);
+    if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleAdvanced(proto) {
+    const el = document.getElementById('adv-' + proto);
+    const toggle = document.getElementById('adv-toggle-' + proto);
+    if (el) {
+        const show = el.style.display === 'none';
+        el.style.display = show ? 'block' : 'none';
+        if (toggle) toggle.textContent = show ? 'Advanced Settings \u25BE' : 'Advanced Settings \u25B8';
+    }
+}
+
 // ─── Render ────────────────────────────────────────────────
 
 function renderProtocolCards() {
@@ -152,47 +180,63 @@ function renderProtocolCards() {
     grid.innerHTML = '';
 
     for (const [proto, def] of Object.entries(PROTOCOLS)) {
-        let fieldsHtml = '';
+        // Basic fields
+        let basicHtml = '';
+        let advancedHtml = '';
+        let hasAdvanced = false;
+
         for (const f of def.fields) {
-            if (f.key === 'flows') continue; // rendered separately
+            if (f.key === 'flows') continue;
+            const isAdv = ADVANCED_KEYS.includes(f.key);
             let input;
             if (f.type === 'select') {
                 const opts = f.options.map(o =>
                     `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o}</option>`).join('');
                 input = `<select id="cfg-${proto}-${f.key}">${opts}</select>`;
             } else if (f.type === 'textarea') {
-                input = `<textarea id="cfg-${proto}-${f.key}" rows="3" style="width:100%;padding:6px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px;resize:vertical;font-family:inherit">${f.default}</textarea>`;
+                input = `<textarea id="cfg-${proto}-${f.key}" rows="3" style="width:100%;padding:6px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;resize:vertical;font-family:inherit">${f.default}</textarea>`;
             } else if (f.type === 'checkbox') {
                 input = `<input type="checkbox" id="cfg-${proto}-${f.key}" ${f.default ? 'checked' : ''}>`;
             } else {
                 const step = f.step ? `step="${f.step}"` : '';
                 input = `<input type="${f.type}" id="cfg-${proto}-${f.key}" value="${f.default}" ${step}>`;
             }
-            fieldsHtml += `<div class="field-row"><label>${f.label}</label>${input}</div>`;
+            const row = `<div class="field-row"><label>${f.label}</label>${input}</div>`;
+            if (isAdv) { advancedHtml += row; hasAdvanced = true; }
+            else basicHtml += row;
         }
 
         const appIdHtml = def.appId ? `<div class="proto-appid">App-ID: ${def.appId}</div>` : '';
 
+        let advSection = '';
+        if (hasAdvanced) {
+            advSection = `<div class="advanced-toggle" id="adv-toggle-${proto}" onclick="event.stopPropagation();toggleAdvanced('${proto}')">Advanced Settings \u25B8</div>
+                <div class="advanced-fields" id="adv-${proto}" style="display:none">${advancedHtml}</div>`;
+        }
+
         grid.innerHTML += `
             <div class="proto-card" id="proto-${proto}">
-                <div class="proto-header">
-                    <span class="proto-select">
+                <div class="proto-header" onclick="toggleProtoDetails('${proto}')">
+                    <span class="proto-select" onclick="event.stopPropagation()">
                         <input type="checkbox" id="select-${proto}" class="proto-checkbox">
                         <span class="proto-name">${def.name}</span>
                     </span>
-                    <span>
+                    <span class="proto-header-right">
                         <span class="proto-badge" id="status-${proto}">Stopped</span>
                         <span class="proto-badge countdown" id="timer-${proto}" style="display:none"></span>
+                        <button class="btn btn-start" onclick="event.stopPropagation();startProto('${proto}')" style="padding:3px 10px;font-size:10px">Start</button>
+                        <button class="btn btn-stop" onclick="event.stopPropagation();stopProto('${proto}')" style="padding:3px 10px;font-size:10px">Stop</button>
                     </span>
                 </div>
-                ${appIdHtml}
-                <div class="proto-fields">${fieldsHtml}</div>
-                <div class="proto-actions">
-                    <button class="btn btn-start" onclick="startProto('${proto}')">Start</button>
-                    <button class="btn btn-stop" onclick="stopProto('${proto}')">Stop</button>
-                    <label style="font-size:11px;color:#666;display:flex;align-items:center;gap:4px;margin-left:8px">
-                        Flows <input type="number" id="cfg-${proto}-flows" value="1" min="1" max="20" style="width:45px;padding:2px 4px;font-size:11px">
-                    </label>
+                <div class="proto-details" id="details-${proto}" style="display:none">
+                    ${appIdHtml}
+                    <div class="proto-fields">${basicHtml}</div>
+                    ${advSection}
+                    <div class="proto-actions" style="margin-top:6px">
+                        <label style="font-size:10px;color:var(--text-secondary);display:flex;align-items:center;gap:4px">
+                            Flows <input type="number" id="cfg-${proto}-flows" value="1" min="1" max="20" style="width:42px;padding:2px 4px;font-size:10px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px">
+                        </label>
+                    </div>
                 </div>
             </div>`;
     }
@@ -212,7 +256,7 @@ async function apiPost(url, body) {
 function getConfig(proto) {
     const cfg = {};
     for (const f of PROTOCOLS[proto].fields) {
-        if (f.key === 'flows') continue; // handled separately
+        if (f.key === 'flows') continue;
         const el = document.getElementById(`cfg-${proto}-${f.key}`);
         if (f.type === 'checkbox') cfg[f.key] = el.checked;
         else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
@@ -372,107 +416,111 @@ async function applyRouterMode(id, mode) {
     loadRouters();
 }
 
+function toggleRouterInterfaces(id) {
+    const el = document.getElementById('rtr-ifaces-' + id);
+    const toggle = document.getElementById('rtr-ifaces-toggle-' + id);
+    if (el) {
+        const show = el.style.display === 'none';
+        el.style.display = show ? 'block' : 'none';
+        if (toggle) toggle.textContent = show ? 'Hide Interfaces' : 'Show Interfaces';
+    }
+}
+
 function renderRouterCard(r) {
     const id = r.router_id;
-    const connColor = r.connected ? '#27ae60' : '#e74c3c';
+    const connColor = r.connected ? 'var(--success)' : 'var(--danger)';
     const connText = r.connected ? 'Connected' : 'Disconnected';
 
     let ifaceRows = '';
+    let selectedIfaceDisplay = r.selected_interface || 'None';
     if (r.interfaces && r.interfaces.length) {
         for (const iface of r.interfaces) {
             const checked = iface.name === r.selected_interface ? 'checked' : '';
-            const stateColor = iface.state === 'up' ? '#27ae60' : '#e74c3c';
+            const stateColor = iface.state === 'up' ? 'var(--success)' : 'var(--danger)';
             const ipStr = iface.ip_address ? iface.ip_address + (iface.subnet || '') : '--';
-            const descStr = iface.description ? ' — ' + iface.description : '';
-            ifaceRows += `<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;cursor:pointer">
+            ifaceRows += `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:11px;cursor:pointer;color:var(--text-primary)">
                 <input type="radio" name="rtr-${id}-iface" value="${iface.name}" ${checked}
                     onchange="selectInterface('${id}','${iface.name}')">
                 <strong>${iface.name}</strong>
-                <span style="color:#666">${ipStr}${descStr}</span>
-                <span style="color:${stateColor};font-weight:600;font-size:11px">${iface.state.toUpperCase()}</span>
+                <span style="color:var(--text-secondary)">${ipStr}</span>
+                <span style="color:${stateColor};font-weight:600;font-size:10px">${iface.state.toUpperCase()}</span>
             </label>`;
         }
     } else {
-        ifaceRows = '<div style="color:#888;font-size:12px">No interfaces discovered</div>';
+        ifaceRows = '<div style="color:var(--text-secondary);font-size:11px">No interfaces discovered</div>';
     }
 
     // Mode indicator
     let modeHtml = '';
     if (r.current_mode === 'healthy') {
-        modeHtml = `<div style="padding:8px 12px;background:#eafaf1;border:2px solid #27ae60;border-radius:8px;font-size:13px;margin-bottom:12px">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#27ae60;margin-right:6px"></span>
-            <strong style="color:#1e8449">HEALTHY</strong> — ${r.selected_interface || '?'} up, no impairment</div>`;
+        modeHtml = `<div style="padding:6px 10px;background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);border-radius:6px;font-size:12px;margin-bottom:8px;color:var(--success)">
+            <strong>HEALTHY</strong> — ${r.selected_interface || '?'} up, no impairment</div>`;
     } else if (r.current_mode === 'impaired') {
         const cfg = r.impairment_config || {};
         const parts = [];
-        if (cfg.latency_ms) parts.push('Latency: ' + cfg.latency_ms + 'ms');
-        if (cfg.jitter_ms) parts.push('Jitter: ' + cfg.jitter_ms + 'ms');
-        if (cfg.packet_loss_pct) parts.push('Loss: ' + cfg.packet_loss_pct + '%');
-        if (cfg.bandwidth_mbps) parts.push('BW: ' + cfg.bandwidth_mbps + ' Mbps');
-        modeHtml = `<div style="padding:8px 12px;background:#fdecea;border:2px solid #e74c3c;border-radius:8px;font-size:13px;margin-bottom:12px">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e74c3c;margin-right:6px"></span>
-            <strong style="color:#c0392b">IMPAIRED</strong> — ${r.selected_interface || '?'} | ${parts.join(' | ') || 'custom'}</div>`;
+        if (cfg.latency_ms) parts.push(cfg.latency_ms + 'ms latency');
+        if (cfg.jitter_ms) parts.push(cfg.jitter_ms + 'ms jitter');
+        if (cfg.packet_loss_pct) parts.push(cfg.packet_loss_pct + '% loss');
+        if (cfg.bandwidth_mbps) parts.push(cfg.bandwidth_mbps + ' Mbps');
+        modeHtml = `<div style="padding:6px 10px;background:rgba(231,76,60,0.1);border:1px solid rgba(231,76,60,0.3);border-radius:6px;font-size:12px;margin-bottom:8px;color:var(--danger)">
+            <strong>IMPAIRED</strong> — ${r.selected_interface || '?'} | ${parts.join(', ') || 'custom'}</div>`;
     } else if (r.current_mode === 'link_down') {
-        modeHtml = `<div style="padding:8px 12px;background:#1a1a2e;border:2px solid #ef4444;border-radius:8px;font-size:13px;margin-bottom:12px;color:#fff">
-            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:6px"></span>
+        modeHtml = `<div style="padding:6px 10px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);border-radius:6px;font-size:12px;margin-bottom:8px;color:#ff6b6b">
             <strong>LINK DOWN</strong> — ${r.selected_interface || '?'} is shut down</div>`;
     }
 
-    return `<div style="background:#f7f8fa;border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:10px">
-                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${connColor}"></span>
-                <strong style="font-size:14px">${r.name}</strong>
-                <span style="color:#666;font-size:12px">${r.ip}</span>
-                <span style="color:${connColor};font-size:11px;font-weight:600">${connText}</span>
+    const inputStyle = 'width:60px;padding:3px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px';
+
+    return `<div style="background:var(--bg-sub);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${connColor}"></span>
+                <strong style="font-size:13px;color:var(--text-primary)">${r.name}</strong>
+                <span style="color:var(--text-secondary);font-size:11px">${r.ip}</span>
+                <span style="color:${connColor};font-size:10px;font-weight:600">${connText}</span>
             </div>
-            <div style="display:flex;gap:6px">
-                ${!r.connected ? '<button class="btn btn-start" onclick="reconnectRouter(\'' + id + '\')" style="padding:3px 10px;font-size:11px">Reconnect</button>' : ''}
-                <button class="btn btn-danger" onclick="removeRouter('${id}')" style="padding:3px 10px;font-size:11px">Remove</button>
+            <div style="display:flex;gap:4px">
+                ${!r.connected ? '<button class="btn btn-start" onclick="reconnectRouter(\'' + id + '\')" style="padding:2px 8px;font-size:10px">Reconnect</button>' : ''}
+                <button class="btn btn-danger" onclick="removeRouter('${id}')" style="padding:2px 8px;font-size:10px">Remove</button>
             </div>
         </div>
         ${r.connected ? `
-        <!-- Interfaces -->
-        <div style="margin-bottom:12px">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-                <label style="font-size:12px;font-weight:600">Interfaces</label>
-                <button class="btn btn-secondary" onclick="refreshInterfaces('${id}')" style="padding:2px 10px;font-size:11px">Refresh</button>
+        ${modeHtml}
+        <!-- Interface toggle -->
+        <div style="margin-bottom:8px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+                <span style="font-size:11px;color:var(--text-secondary)">Interface: <strong style="color:var(--text-primary)">${selectedIfaceDisplay}</strong></span>
+                <button class="btn btn-secondary" id="rtr-ifaces-toggle-${id}" onclick="toggleRouterInterfaces('${id}')" style="padding:2px 8px;font-size:10px">Show Interfaces</button>
+                <button class="btn btn-secondary" onclick="refreshInterfaces('${id}')" style="padding:2px 8px;font-size:10px">Refresh</button>
             </div>
-            <div style="padding:6px 10px;background:#fff;border:1px solid #e0e0e0;border-radius:6px">
+            <div id="rtr-ifaces-${id}" style="display:none;padding:6px 8px;background:var(--bg-card);border:1px solid var(--border);border-radius:4px;margin-top:4px">
                 ${ifaceRows}
             </div>
         </div>
-        <!-- Presets -->
-        <div style="margin-bottom:10px">
-            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Presets</label>
-            <div style="display:flex;flex-wrap:wrap;gap:6px">
-                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','degraded_wan')" style="padding:3px 10px;font-size:11px">Degraded WAN</button>
-                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','voice_sla')" style="padding:3px 10px;font-size:11px">Voice SLA</button>
-                <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','video_sla')" style="padding:3px 10px;font-size:11px">Video SLA</button>
-            </div>
+        <!-- Presets + Impairment in compact row -->
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+            <span style="font-size:10px;color:var(--text-secondary)">Presets:</span>
+            <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','degraded_wan')" style="padding:2px 8px;font-size:10px">Degraded WAN</button>
+            <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','voice_sla')" style="padding:2px 8px;font-size:10px">Voice SLA</button>
+            <button class="btn btn-secondary" onclick="applyRouterPreset('${id}','video_sla')" style="padding:2px 8px;font-size:10px">Video SLA</button>
         </div>
-        <!-- Impairment Values -->
-        <div style="margin-bottom:12px">
-            <label style="font-size:12px;font-weight:600;margin-bottom:4px;display:block">Impairment Values</label>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                <label style="font-size:12px">Latency</label>
-                <input type="number" id="rtr-${id}-latency" value="${(r.impairment_config||{}).latency_ms||0}" min="0" max="5000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>
-                <label style="font-size:12px;margin-left:6px">Jitter</label>
-                <input type="number" id="rtr-${id}-jitter" value="${(r.impairment_config||{}).jitter_ms||0}" min="0" max="2000" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">ms</span>
-                <label style="font-size:12px;margin-left:6px">Loss</label>
-                <input type="number" id="rtr-${id}-loss" value="${(r.impairment_config||{}).packet_loss_pct||0}" min="0" max="100" step="0.5" style="width:70px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">%</span>
-                <label style="font-size:12px;margin-left:6px">BW</label>
-                <input type="number" id="rtr-${id}-bw" value="${(r.impairment_config||{}).bandwidth_mbps||0}" min="0" max="10000" step="10" style="width:80px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px"><span style="font-size:12px">Mbps</span>
-            </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px">
+            <label style="font-size:10px;color:var(--text-secondary)">Latency</label>
+            <input type="number" id="rtr-${id}-latency" value="${(r.impairment_config||{}).latency_ms||0}" min="0" max="5000" style="${inputStyle}"><span style="font-size:10px;color:var(--text-secondary)">ms</span>
+            <label style="font-size:10px;color:var(--text-secondary);margin-left:4px">Jitter</label>
+            <input type="number" id="rtr-${id}-jitter" value="${(r.impairment_config||{}).jitter_ms||0}" min="0" max="2000" style="${inputStyle}"><span style="font-size:10px;color:var(--text-secondary)">ms</span>
+            <label style="font-size:10px;color:var(--text-secondary);margin-left:4px">Loss</label>
+            <input type="number" id="rtr-${id}-loss" value="${(r.impairment_config||{}).packet_loss_pct||0}" min="0" max="100" step="0.5" style="${inputStyle}"><span style="font-size:10px;color:var(--text-secondary)">%</span>
+            <label style="font-size:10px;color:var(--text-secondary);margin-left:4px">BW</label>
+            <input type="number" id="rtr-${id}-bw" value="${(r.impairment_config||{}).bandwidth_mbps||0}" min="0" max="10000" step="10" style="width:70px;padding:3px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px"><span style="font-size:10px;color:var(--text-secondary)">Mbps</span>
         </div>
-        ${modeHtml}
         <!-- Mode Buttons -->
-        <div style="display:flex;gap:8px">
-            <button class="btn btn-start" onclick="applyRouterMode('${id}','healthy')" style="padding:6px 16px">Healthy</button>
-            <button class="btn btn-primary" onclick="applyRouterMode('${id}','impaired')" style="padding:6px 16px">Apply Impaired</button>
-            <button class="btn btn-danger" onclick="applyRouterMode('${id}','link_down')" style="padding:6px 16px">Link Down</button>
+        <div style="display:flex;gap:6px">
+            <button class="btn btn-start" onclick="applyRouterMode('${id}','healthy')" style="padding:4px 12px;font-size:11px">Healthy</button>
+            <button class="btn btn-primary" onclick="applyRouterMode('${id}','impaired')" style="padding:4px 12px;font-size:11px">Apply Impaired</button>
+            <button class="btn btn-danger" onclick="applyRouterMode('${id}','link_down')" style="padding:4px 12px;font-size:11px">Link Down</button>
         </div>
-        ` : '<div style="color:#888;font-size:12px;padding:8px 0">Router disconnected. Click Reconnect to restore.</div>'}
+        ` : '<div style="color:var(--text-secondary);font-size:11px;padding:6px 0">Router disconnected. Click Reconnect to restore.</div>'}
     </div>`;
 }
 
@@ -483,7 +531,7 @@ async function loadRouters() {
         const container = document.getElementById('router-cards-container');
         if (!container) return;
         if (!routers.length) {
-            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:12px">No routers added. Add a router above to start link simulation.</div>';
             return;
         }
         container.innerHTML = routers.map(r => renderRouterCard(r)).join('');
@@ -497,25 +545,22 @@ async function pollRouterStatus() {
         const container = document.getElementById('router-cards-container');
         if (!container) return;
         if (!routers.length) {
-            container.innerHTML = '<div style="color:#888;font-size:13px;text-align:center;padding:16px">No routers added. Add a router above to start link simulation.</div>';
+            container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:12px">No routers added. Add a router above to start link simulation.</div>';
             return;
         }
-        // Preserve impairment input values during re-render
         const savedValues = {};
         for (const r of routers) {
-            const id = r.router_id;
+            const rid = r.router_id;
             for (const f of ['latency','jitter','loss','bw']) {
-                const el = document.getElementById('rtr-' + id + '-' + f);
-                if (el) savedValues[id + '-' + f] = el.value;
+                const el = document.getElementById('rtr-' + rid + '-' + f);
+                if (el) savedValues[rid + '-' + f] = el.value;
             }
         }
         container.innerHTML = routers.map(r => renderRouterCard(r)).join('');
-        // Restore saved input values
         for (const [key, val] of Object.entries(savedValues)) {
             const el = document.getElementById('rtr-' + key);
             if (el) el.value = val;
         }
-        // Merge router logs into activity log
         for (const r of routers) {
             if (r.logs) {
                 for (const line of r.logs) {
@@ -553,11 +598,9 @@ async function pollStatus() {
         const data = await resp.json();
         let totSent = 0, totRecv = 0, totReqs = 0, totErrs = 0;
 
-        // Aggregate stats per base protocol (http_1, http_2 → http)
         const protoAgg = {};
         for (const [jobKey, info] of Object.entries(data.jobs)) {
             const baseParts = jobKey.split('_');
-            // Determine base protocol: "ext_https_2" → "ext_https", "http_2" → "http", "http" → "http"
             let base;
             if (baseParts.length >= 3 && !isNaN(baseParts[baseParts.length - 1])) {
                 base = baseParts.slice(0, -1).join('_');
@@ -608,7 +651,6 @@ async function pollStatus() {
             }
         }
 
-        // Reset cards with no jobs
         for (const proto of Object.keys(PROTOCOLS)) {
             if (!protoAgg[proto]) {
                 const card = document.getElementById(`proto-${proto}`);
@@ -625,7 +667,6 @@ async function pollStatus() {
         document.getElementById('stat-reqs').textContent = totReqs.toLocaleString();
         document.getElementById('stat-errors').textContent = totErrs.toLocaleString();
 
-        // Merge engine logs into the unified log buffer
         for (const [proto, info] of Object.entries(data.jobs)) {
             if (info.logs) {
                 for (const line of info.logs) {
@@ -637,7 +678,6 @@ async function pollStatus() {
                 }
             }
         }
-        // Cap dedup set to prevent memory growth
         if (_seenEngineLogs.size > 5000) {
             const arr = Array.from(_seenEngineLogs);
             _seenEngineLogs = new Set(arr.slice(arr.length - 2000));

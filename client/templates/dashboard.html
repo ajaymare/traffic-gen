@@ -17,8 +17,11 @@
 
     <!-- Stats -->
     <div class="card">
-        <div class="card-header">Live Statistics</div>
-        <div class="card-body">
+        <div class="card-header" onclick="toggleSection('stats')">
+            <span>Live Statistics</span>
+            <span class="chevron" id="chevron-stats">&#9660;</span>
+        </div>
+        <div class="card-body" id="section-stats">
             <div class="stats-grid">
                 <div class="stat-box"><div class="stat-label">Bytes Sent</div><div class="stat-value" id="stat-sent">0 B</div></div>
                 <div class="stat-box"><div class="stat-label">Bytes Received</div><div class="stat-value" id="stat-recv">0 B</div></div>
@@ -30,19 +33,22 @@
 
     <!-- Router Link Simulation -->
     <div class="card">
-        <div class="card-header">Link Simulation — Routers</div>
-        <div class="card-body">
+        <div class="card-header" onclick="toggleSection('routers')">
+            <span>Link Simulation — Routers</span>
+            <span class="chevron" id="chevron-routers">&#9660;</span>
+        </div>
+        <div class="card-body" id="section-routers">
             <!-- Add Router Form -->
-            <div style="margin-bottom:16px;padding:12px;background:#f0f2f5;border-radius:8px">
-                <label style="font-size:12px;font-weight:600;margin-bottom:8px;display:block">Add Router</label>
-                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-                    <input type="text" id="router-add-name" placeholder="Name" style="width:120px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
-                    <input type="text" id="router-add-ip" placeholder="Router IP" style="width:140px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
-                    <input type="text" id="router-add-user" placeholder="Username" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
-                    <input type="password" id="router-add-pass" placeholder="Password" style="width:110px;padding:4px 8px;font-size:12px;border:1px solid #d0d0d0;border-radius:4px">
-                    <button class="btn btn-start" onclick="addRouter()">Add Router</button>
+            <div style="margin-bottom:12px;padding:10px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">
+                <label style="font-size:11px;font-weight:600;margin-bottom:6px;display:block;color:var(--text-secondary)">Add Router</label>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+                    <input type="text" id="router-add-name" placeholder="Name" style="width:110px;padding:4px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px">
+                    <input type="text" id="router-add-ip" placeholder="Router IP" style="width:130px;padding:4px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px">
+                    <input type="text" id="router-add-user" placeholder="Username" style="width:100px;padding:4px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px">
+                    <input type="password" id="router-add-pass" placeholder="Password" style="width:100px;padding:4px 8px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px">
+                    <button class="btn btn-start" onclick="addRouter()">Add</button>
                 </div>
-                <div id="router-add-error" style="display:none;margin-top:6px;font-size:12px;color:#ef4444"></div>
+                <div id="router-add-error" style="display:none;margin-top:4px;font-size:11px;color:var(--danger)"></div>
             </div>
             <!-- Router Cards Container -->
             <div id="router-cards-container"></div>
@@ -51,22 +57,25 @@
 
     <!-- Source IPs -->
     <div class="card">
-        <div class="card-header">Source IP Simulation</div>
-        <div class="card-body">
-            <div style="padding:10px;background:#f0f2f5;border-radius:8px">
-                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <div class="card-header" onclick="toggleSection('sourceip')">
+            <span>Source IP Simulation</span>
+            <span class="chevron collapsed" id="chevron-sourceip">&#9660;</span>
+        </div>
+        <div class="card-body collapsed" id="section-sourceip">
+            <div style="padding:8px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
                     <input type="checkbox" id="source-ip-toggle">
-                    <strong>Random Source IPs</strong> (simulate multiple clients)
+                    <strong style="font-size:12px">Random Source IPs</strong> <span style="font-size:11px;color:var(--text-secondary)">(simulate multiple clients)</span>
                 </label>
-                <div id="source-ip-config" style="display:none;margin-top:8px">
+                <div id="source-ip-config" style="display:none;margin-top:6px">
                     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                        <label style="font-size:12px">Base IP</label>
-                        <input type="text" id="source-ip-base" value="172.18.0.100" style="width:140px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">
-                        <label style="font-size:12px">Count</label>
-                        <input type="number" id="source-ip-count" value="5" min="1" max="50" style="width:60px;padding:4px 8px;background:#ffffff;color:#1a1a2e;border:1px solid #d0d0d0;border-radius:4px">
-                        <button class="btn btn-primary" onclick="applySourceIps()" style="padding:4px 12px">Apply</button>
+                        <label style="font-size:11px;color:var(--text-secondary)">Base IP</label>
+                        <input type="text" id="source-ip-base" value="172.18.0.100" style="width:130px;padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                        <label style="font-size:11px;color:var(--text-secondary)">Count</label>
+                        <input type="number" id="source-ip-count" value="5" min="1" max="50" style="width:55px;padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                        <button class="btn btn-primary" onclick="applySourceIps()" style="padding:4px 10px">Apply</button>
                     </div>
-                    <div id="source-ip-list" style="margin-top:8px;font-size:11px;color:#888"></div>
+                    <div id="source-ip-list" style="margin-top:6px;font-size:10px;color:var(--text-secondary)"></div>
                 </div>
             </div>
         </div>
@@ -74,32 +83,36 @@
 
     <!-- Protocol Cards -->
     <div class="card">
-        <div class="card-header">
-            Traffic Generators
-            <div class="bulk-actions">
-                <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
-                <button class="btn btn-secondary" onclick="deselectAll()">Deselect All</button>
-                <button class="btn btn-start" onclick="startSelected()">Start Selected</button>
-                <button class="btn btn-stop" onclick="stopSelected()">Stop Selected</button>
+        <div class="card-header" onclick="toggleSection('protocols')">
+            <span>Traffic Generators</span>
+            <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
+                <div class="bulk-actions">
+                    <button class="btn btn-secondary" onclick="selectAll()">Select All</button>
+                    <button class="btn btn-secondary" onclick="deselectAll()">Deselect</button>
+                    <button class="btn btn-start" onclick="startSelected()">Start Selected</button>
+                    <button class="btn btn-stop" onclick="stopSelected()">Stop Selected</button>
+                </div>
+                <span class="chevron" id="chevron-protocols">&#9660;</span>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" id="section-protocols">
             <div class="protocol-grid" id="protocol-grid"></div>
         </div>
     </div>
 
     <!-- Logs -->
     <div class="card">
-        <div class="card-header">
-            Activity Log
-            <div style="display:flex;align-items:center;gap:8px">
-                <label style="display:flex;align-items:center;gap:4px;font-size:12px;font-weight:normal;cursor:pointer">
+        <div class="card-header" onclick="toggleSection('logs')">
+            <span>Activity Log</span>
+            <div style="display:flex;align-items:center;gap:8px" onclick="event.stopPropagation()">
+                <label style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:normal;cursor:pointer;color:var(--text-secondary)">
                     <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()"> Auto-refresh
                 </label>
                 <button class="btn btn-secondary" onclick="logBuf.length=0;document.getElementById('log-panel').innerHTML=''">Clear</button>
+                <span class="chevron collapsed" id="chevron-logs">&#9660;</span>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body collapsed" id="section-logs">
             <div class="log-panel" id="log-panel"></div>
         </div>
     </div>
