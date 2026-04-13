@@ -549,17 +549,26 @@ async function pollRouterStatus() {
             return;
         }
         const savedValues = {};
+        const expandedIfaces = {};
         for (const r of routers) {
             const rid = r.router_id;
             for (const f of ['latency','jitter','loss','bw']) {
                 const el = document.getElementById('rtr-' + rid + '-' + f);
                 if (el) savedValues[rid + '-' + f] = el.value;
             }
+            const ifaceEl = document.getElementById('rtr-ifaces-' + rid);
+            if (ifaceEl && ifaceEl.style.display !== 'none') expandedIfaces[rid] = true;
         }
         container.innerHTML = routers.map(r => renderRouterCard(r)).join('');
         for (const [key, val] of Object.entries(savedValues)) {
             const el = document.getElementById('rtr-' + key);
             if (el) el.value = val;
+        }
+        for (const rid of Object.keys(expandedIfaces)) {
+            const ifaceEl = document.getElementById('rtr-ifaces-' + rid);
+            const toggleBtn = document.getElementById('rtr-ifaces-toggle-' + rid);
+            if (ifaceEl) ifaceEl.style.display = 'block';
+            if (toggleBtn) toggleBtn.textContent = 'Hide Interfaces';
         }
         for (const r of routers) {
             if (r.logs) {

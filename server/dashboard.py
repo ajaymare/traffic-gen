@@ -44,19 +44,19 @@ DASHBOARD_HTML = r"""
     <title>Traffic Generator — Control Panel</title>
     <style>
         :root {
-            --bg-primary: #0f1117;
-            --bg-card: #1a1d27;
-            --bg-card-header: #1e2130;
-            --bg-input: #252836;
-            --bg-hover: #2a2d3a;
-            --bg-sub: #151821;
-            --border: #2d3148;
-            --text-primary: #e4e6eb;
-            --text-secondary: #8b8fa3;
-            --accent: #FA582D;
-            --accent-teal: #00C4B3;
-            --danger: #ef4444;
-            --success: #27ae60;
+            --bg-primary: #f0f4f8;
+            --bg-card: #ffffff;
+            --bg-card-header: #f7f9fc;
+            --bg-input: #f5f7fa;
+            --bg-hover: #edf1f7;
+            --bg-sub: #f7f9fc;
+            --border: #d4dbe6;
+            --text-primary: #1e2a3a;
+            --text-secondary: #6b7a8d;
+            --accent: #0066cc;
+            --accent-teal: #00a67e;
+            --danger: #dc3545;
+            --success: #28a745;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -64,11 +64,11 @@ DASHBOARD_HTML = r"""
             background: var(--bg-primary); color: var(--text-primary); min-height: 100vh;
         }
         .header {
-            background: linear-gradient(135deg, #12141c, #1a1d2a);
+            background: linear-gradient(135deg, #1a2a44, #243b5c);
             padding: 14px 24px; border-bottom: 2px solid var(--accent);
             display: flex; align-items: center; justify-content: space-between;
         }
-        .header h1 { font-size: 18px; font-weight: 600; color: var(--accent); }
+        .header h1 { font-size: 18px; font-weight: 600; color: #ffffff; }
         .header .status { font-size: 11px; color: var(--text-secondary); }
 
         /* Tabs */
@@ -101,7 +101,7 @@ DASHBOARD_HTML = r"""
         }
         .card {
             background: var(--bg-card); border: 1px solid var(--border);
-            border-radius: 8px; overflow: hidden;
+            border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
         }
         .card-header {
             padding: 10px 14px; background: var(--bg-card-header);
@@ -140,7 +140,7 @@ DASHBOARD_HTML = r"""
         }
         .service-name { font-weight: 600; font-size: 13px; color: var(--accent); text-transform: uppercase; }
         .service-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; }
-        .service-badge.active { background: rgba(0,196,179,0.15); color: var(--accent-teal); }
+        .service-badge.active { background: #e6f4ee; color: var(--accent-teal); }
         .service-badge.idle { background: var(--bg-hover); color: var(--text-secondary); }
         .service-stat {
             display: flex; justify-content: space-between;
@@ -178,8 +178,8 @@ DASHBOARD_HTML = r"""
         .proto-name { font-weight: 600; font-size: 13px; text-transform: uppercase; color: var(--text-primary); }
         .proto-header-right { display: flex; align-items: center; gap: 6px; }
         .proto-badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; background: var(--bg-hover); color: var(--text-secondary); }
-        .proto-badge.running { background: rgba(0,196,179,0.15); color: var(--accent-teal); }
-        .proto-badge.countdown { background: rgba(250,88,45,0.15); color: var(--accent); font-variant-numeric: tabular-nums; }
+        .proto-badge.running { background: #e6f4ee; color: var(--accent-teal); }
+        .proto-badge.countdown { background: #e8f0fe; color: var(--accent); font-variant-numeric: tabular-nums; }
         .proto-details { margin-top: 10px; }
         .proto-fields { display: flex; flex-direction: column; gap: 5px; margin-bottom: 8px; }
         .field-row { display: flex; align-items: center; gap: 8px; }
@@ -204,24 +204,24 @@ DASHBOARD_HTML = r"""
         }
         .btn:active { opacity: 0.8; }
         .btn-start { background: var(--accent-teal); color: #fff; }
-        .btn-start:hover { background: #00a89a; }
+        .btn-start:hover { background: #008f6b; }
         .btn-stop { background: var(--danger); color: #fff; }
         .btn-stop:hover { background: #dc2626; }
         .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #e04a20; }
+        .btn-primary:hover { background: #0055aa; }
         .btn-secondary { background: var(--bg-hover); color: var(--text-primary); border: 1px solid var(--border); }
-        .btn-secondary:hover { background: #353849; }
+        .btn-secondary:hover { background: #dce4ef; }
         .btn-danger { background: var(--danger); color: #fff; }
         .btn-danger:hover { background: #dc2626; }
 
         /* Log panel */
         .log-panel {
-            background: var(--bg-sub); border: 1px solid var(--border); border-radius: 4px;
+            background: #1e2a3a; border: 1px solid var(--border); border-radius: 4px;
             padding: 8px; font-family: 'Monaco', 'Menlo', monospace;
             font-size: 11px; max-height: 250px; overflow-y: auto; line-height: 1.5;
         }
-        .log-entry { color: var(--text-secondary); white-space: pre-wrap; word-break: break-all; }
-        .log-entry.error { color: var(--danger); }
+        .log-entry { color: #b0bec5; white-space: pre-wrap; word-break: break-all; }
+        .log-entry.error { color: #ff6b6b; }
 
         /* Modal */
         .modal-overlay {
@@ -313,7 +313,7 @@ DASHBOARD_HTML = r"""
             </div>
         </div>
         <div class="card-body collapsed" id="section-srv-ftp">
-            <div id="upload-status" style="display:none;padding:6px;margin-bottom:6px;border-radius:4px;background:rgba(0,196,179,0.15);color:var(--accent-teal);font-size:11px"></div>
+            <div id="upload-status" style="display:none;padding:6px;margin-bottom:6px;border-radius:4px;background:#e6f4ee;color:var(--accent-teal);font-size:11px"></div>
             <table class="connections-table">
                 <thead><tr><th>Filename</th><th>Size</th><th>Action</th></tr></thead>
                 <tbody id="ftp-files-body">
@@ -973,8 +973,9 @@ async function clientPollRouterStatus(clientName) {
             container.innerHTML = '<div style="color:var(--text-secondary);font-size:12px;text-align:center;padding:12px">No routers added. Add a router above to start link simulation.</div>';
             return;
         }
-        // Preserve impairment input values during re-render
+        // Preserve impairment input values and interface toggle state during re-render
         var savedValues = {};
+        var expandedIfaces = {};
         for (var i = 0; i < routers.length; i++) {
             var rid = routers[i].router_id;
             var fields = ['latency','jitter','loss','bw'];
@@ -982,11 +983,19 @@ async function clientPollRouterStatus(clientName) {
                 var el = document.getElementById('c-' + clientName + '-rtr-' + rid + '-' + fields[j]);
                 if (el) savedValues[rid + '-' + fields[j]] = el.value;
             }
+            var ifaceEl = document.getElementById('c-' + clientName + '-rtr-ifaces-' + rid);
+            if (ifaceEl && ifaceEl.style.display !== 'none') expandedIfaces[rid] = true;
         }
         container.innerHTML = routers.map(function(r) { return clientRenderRouterCard(clientName, r); }).join('');
         for (var key in savedValues) {
             var el = document.getElementById('c-' + clientName + '-rtr-' + key);
             if (el) el.value = savedValues[key];
+        }
+        for (var rid in expandedIfaces) {
+            var ifaceEl = document.getElementById('c-' + clientName + '-rtr-ifaces-' + rid);
+            var toggleBtn = document.getElementById('c-' + clientName + '-rtr-ifaces-toggle-' + rid);
+            if (ifaceEl) ifaceEl.style.display = 'block';
+            if (toggleBtn) toggleBtn.textContent = 'Hide Interfaces';
         }
     } catch(e) {}
 }
