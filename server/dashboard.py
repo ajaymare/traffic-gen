@@ -1047,6 +1047,10 @@ async function clientLoadSourceIps(clientName) {
 
 // ─── Client Topology ────────────────────────────────────────
 var clientTopoNetworks = {};
+var clientTopoEdges = {};
+var clientTopoAnimIntervals = {};
+var clientTopoAnimState = {};
+var clientTopoHasTraffic = {};
 
 async function clientRefreshTopology(clientName) {
     try {
@@ -1065,79 +1069,139 @@ function clientRenderTopology(clientName, data) {
 
     var nodes = new vis.DataSet();
     var edges = new vis.DataSet();
+    clientTopoEdges[clientName] = edges;
 
-    nodes.add({
-        id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
-        color: { background: '#e6f4ee', border: '#00a67e', highlight: { background: '#d0efe3', border: '#008f6b' } },
-        font: { size: 12, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
-    });
-    nodes.add({
-        id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
-        color: { background: '#e8f0fe', border: '#0066cc', highlight: { background: '#d0e0fc', border: '#0055aa' } },
-        font: { size: 12, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
-    });
-
+    var hops = data.hops || [];
     var routers = data.routers || [];
-    for (var i = 0; i < routers.length; i++) {
-        var r = routers[i];
-        var modeColors = { healthy: { bg: '#e6f4ee', border: '#00a67e' }, impaired: { bg: '#fff3e0', border: '#ff9800' }, link_down: { bg: '#fde8e8', border: '#dc3545' } };
-        var mc = modeColors[r.current_mode] || { bg: '#f7f9fc', border: '#d4dbe6' };
-        var ifLabel = r.selected_interface ? ' (' + r.selected_interface + ')' : '';
-        var mLabel = r.current_mode ? r.current_mode.toUpperCase().replace('_', ' ') : 'IDLE';
-        var impLabel = '';
-        if (r.current_mode === 'impaired' && r.impairment_config) {
-            var ic = r.impairment_config;
-            var parts = [];
-            if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-            if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-            if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-            if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-            if (parts.length) impLabel = '\n' + parts.join(' / ');
-        }
-        nodes.add({
-            id: 'router_' + r.router_id,
-            label: r.name + '\n' + r.ip + ifLabel + '\n' + mLabel + impLabel,
-            shape: 'box',
-            color: { background: mc.bg, border: mc.border, highlight: { background: mc.bg, border: mc.border } },
-            font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10
-        });
-        edges.add({ id: 'c2r_' + r.router_id, from: 'client', to: 'router_' + r.router_id, arrows: 'to',
-            color: { color: mc.border }, width: 2, smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 } });
-        edges.add({ id: 'r2s_' + r.router_id, from: 'router_' + r.router_id, to: 'server', arrows: 'to',
-            color: { color: mc.border }, width: 2, smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 } });
-    }
-
-    if (routers.length === 0) {
-        edges.add({ id: 'direct', from: 'client', to: 'server', arrows: 'to',
-            color: { color: '#0066cc' }, width: 2, dashes: true, label: 'direct', font: { size: 10, color: '#6b7a8d' } });
-    }
-
     var protocols = data.protocols || [];
-    if (protocols.length > 0) {
-        var protoNames = protocols.map(function(p) {
-            var base = p.name.split('_')[0];
-            return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-        });
-        var unique = protoNames.filter(function(v, i, a) { return a.indexOf(v) === i; });
-        var label = unique.join(', ');
-        if (routers.length === 0) {
-            edges.update({ id: 'direct', label: label, dashes: false, width: 3, color: { color: '#00a67e' } });
+    var runningProtos = protocols.filter(function(p) { return p.running; });
+    var hasTraffic = runningProtos.length > 0;
+    clientTopoHasTraffic[clientName] = hasTraffic;
+
+    // Router IP lookup
+    var routerByIp = {};
+    routers.forEach(function(r) { routerByIp[r.ip] = r; });
+
+    // Protocol label
+    var protoNames = runningProtos.map(function(p) {
+        var base = p.name.split('_')[0];
+        return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+    });
+    var protoLabel = protoNames.filter(function(v, i, a) { return a.indexOf(v) === i; }).join(', ');
+
+    var activeColor = hasTraffic ? '#00a67e' : '#0066cc';
+    var edgeWidth = hasTraffic ? 3 : 2;
+
+    // CLIENT node
+    nodes.add({ id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
+        color: { background: '#e6f4ee', border: '#00a67e' },
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12 });
+
+    // HOP nodes
+    var nodeIds = ['client'];
+    for (var i = 0; i < hops.length; i++) {
+        var h = hops[i];
+        var isLast = i === hops.length - 1;
+        var hopId = 'hop_' + h.hop;
+        var isTimeout = h.ip === '*';
+        var router = routerByIp[h.ip];
+        var bg = '#e8f0fe', border = '#0066cc', label = '';
+
+        if (isTimeout) {
+            bg = '#fde8e8'; border = '#dc3545';
+            label = 'HOP ' + h.hop + '\n* (timeout)';
+        } else if (router) {
+            var mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
+            var c = mc[router.current_mode] || { bg: '#e8f0fe', b: '#0066cc' };
+            bg = c.bg; border = c.b;
+            var mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
+            label = router.name + '\n' + h.ip + '\n' + mode;
+            if (router.current_mode === 'impaired' && router.impairment_config) {
+                var ic = router.impairment_config;
+                var parts = [];
+                if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+                if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+                if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+                if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+                if (parts.length) label += '\n' + parts.join(' / ');
+            }
         } else {
-            edges.update({ id: 'c2r_' + routers[0].router_id, label: label, font: { size: 9, color: '#0066cc' }, width: 3 });
+            label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
         }
+
+        if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
+            // Skip — server node covers it
+        } else {
+            nodes.add({ id: hopId, label: label, shape: 'box',
+                color: { background: bg, border: border },
+                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10 });
+            nodeIds.push(hopId);
+        }
+    }
+
+    // SERVER node
+    nodes.add({ id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
+        color: { background: '#e8f0fe', border: '#0066cc' },
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12 });
+    nodeIds.push('server');
+
+    // Edges
+    for (var j = 0; j < nodeIds.length - 1; j++) {
+        edges.add({ id: 'e_' + j, from: nodeIds[j], to: nodeIds[j + 1], arrows: 'to',
+            color: { color: hasTraffic ? activeColor : '#aab4c2' }, width: edgeWidth,
+            dashes: hasTraffic ? [8, 4] : false,
+            label: j === 0 && protoLabel ? protoLabel : '',
+            font: { size: 9, color: '#0066cc', strokeWidth: 0 } });
     }
 
     var options = {
-        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 200, nodeSpacing: 80 } },
-        physics: false,
-        interaction: { dragNodes: true, zoomView: true, dragView: true },
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 180, nodeSpacing: 60 } },
+        physics: false, interaction: { dragNodes: true, zoomView: true, dragView: true },
         edges: { font: { align: 'top' } }
     };
+
+    // Stats bar
+    var statsId = 'c-' + clientName + '-topo-stats';
+    var statsEl = document.getElementById(statsId);
+    if (!statsEl) {
+        statsEl = document.createElement('div');
+        statsEl.id = statsId;
+        statsEl.style.cssText = 'padding:8px 12px;font-size:11px;color:var(--text-secondary);border-top:1px solid var(--border);background:var(--bg-card)';
+        container.parentNode.appendChild(statsEl);
+    }
+    if (hasTraffic) {
+        var statParts = runningProtos.map(function(p) {
+            var base = p.name.split('_')[0];
+            var name = (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+            return name + ' (' + fmtBytes(p.stats.bytes_sent || 0) + ' sent)';
+        });
+        var uniqueStats = statParts.filter(function(v, i, a) { return a.indexOf(v) === i; });
+        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + uniqueStats.join(' | ');
+    } else {
+        statsEl.innerHTML = '<span style="color:var(--text-secondary)">No active traffic flows</span>';
+    }
 
     if (clientTopoNetworks[clientName]) {
         clientTopoNetworks[clientName].setData({ nodes: nodes, edges: edges });
     } else {
         clientTopoNetworks[clientName] = new vis.Network(container, { nodes: nodes, edges: edges }, options);
+    }
+
+    // Animation
+    if (hasTraffic && !clientTopoAnimIntervals[clientName]) {
+        clientTopoAnimState[clientName] = 0;
+        clientTopoAnimIntervals[clientName] = setInterval(function() {
+            var es = clientTopoEdges[clientName];
+            if (!es || !clientTopoHasTraffic[clientName]) return;
+            var st = (clientTopoAnimState[clientName] + 1) % 3;
+            clientTopoAnimState[clientName] = st;
+            var dp = [[8,4],[6,6],[4,8]];
+            var cols = ['#00a67e','#00b88a','#00cc99'];
+            es.forEach(function(e) { es.update({ id: e.id, dashes: dp[st], color: { color: cols[st] } }); });
+        }, 800);
+    } else if (!hasTraffic && clientTopoAnimIntervals[clientName]) {
+        clearInterval(clientTopoAnimIntervals[clientName]);
+        clientTopoAnimIntervals[clientName] = null;
     }
 }
 
@@ -1394,7 +1458,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pollInterval = setInterval(pollAll, 2000);
     setInterval(function() {
         if (activeTab && activeTab !== 'server') clientRefreshTopology(activeTab);
-    }, 30000);
+    }, 10000);
     pollAll();
 });
 </script>

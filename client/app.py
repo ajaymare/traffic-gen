@@ -1,5 +1,6 @@
 """Traffic Generator Client — Flask Web UI + REST API."""
 import os
+import time
 import socket
 import logging
 import subprocess
@@ -141,10 +142,12 @@ def router_status(router_id):
     return jsonify(router_manager.get_status(router_id))
 
 
+_topo_cache = {'hops': [], 'time': 0}
+
+
 @app.route('/api/topology')
 def topology():
-    """Return topology data: client IP, routers, server, running protocols."""
-    # Client IP
+    """Return topology with traceroute hops, running protocols, and router state."""
     client_ip = '--'
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -154,31 +157,43 @@ def topology():
     except Exception:
         pass
 
-    # Running protocols and their destinations
+    # Traceroute with 30s cache
+    if time.time() - _topo_cache['time'] > 30:
+        try:
+            result = subprocess.run(
+                ['traceroute', '-n', '-q', '1', '-w', '2', '-m', '15', SERVER_HOST],
+                capture_output=True, text=True, timeout=20)
+            hops = []
+            for line in result.stdout.strip().split('\n')[1:]:
+                parts = line.split()
+                if len(parts) >= 2:
+                    ip = parts[1] if parts[1] != '*' else '*'
+                    rtt = parts[2] if len(parts) >= 3 and parts[1] != '*' else '--'
+                    hops.append({'hop': int(parts[0]), 'ip': ip, 'rtt': rtt})
+            _topo_cache['hops'] = hops
+            _topo_cache['time'] = time.time()
+        except Exception:
+            pass
+
+    # Running protocols with stats
     status = engine.get_status()
     protocols = []
     for proto, info in status.items():
-        if info.get('running'):
-            cfg = info.get('config', {})
-            dest = cfg.get('host', SERVER_HOST)
-            port = cfg.get('port', '')
-            if 'url' in cfg:
-                dest = cfg['url']
-            protocols.append({
-                'name': proto,
-                'dest': dest,
-                'port': str(port),
-                'running': True,
-            })
+        protocols.append({
+            'name': proto,
+            'running': info.get('running', False),
+            'stats': info.get('stats', {}),
+        })
 
-    # Routers
+    # Routers for impairment overlay
     routers = router_manager.list_routers()
 
     return jsonify({
         'client_ip': client_ip,
         'server_host': SERVER_HOST,
-        'routers': routers,
+        'hops': _topo_cache.get('hops', []),
         'protocols': protocols,
+        'routers': routers,
     })
 
 

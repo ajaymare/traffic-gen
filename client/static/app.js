@@ -795,7 +795,10 @@ async function loadFtpFileList() {
 // ─── Topology ───────────────────────────────────────────────
 
 let topoNetwork = null;
-let topoRefreshInterval = null;
+let topoAnimInterval = null;
+let topoEdges = null;
+let topoAnimState = 0;
+let topoHasTraffic = false;
 
 async function refreshTopology() {
     try {
@@ -814,138 +817,162 @@ function renderTopology(data) {
 
     const nodes = new vis.DataSet();
     const edges = new vis.DataSet();
+    topoEdges = edges;
 
-    // Client node
-    nodes.add({
-        id: 'client',
-        label: 'CLIENT\n' + data.client_ip,
-        shape: 'box',
-        color: { background: '#e6f4ee', border: '#00a67e', highlight: { background: '#d0efe3', border: '#008f6b' } },
-        font: { size: 12, face: 'monospace', multi: true },
-        borderWidth: 2,
-        margin: 10,
-    });
-
-    // Server node
-    nodes.add({
-        id: 'server',
-        label: 'SERVER\n' + data.server_host,
-        shape: 'box',
-        color: { background: '#e8f0fe', border: '#0066cc', highlight: { background: '#d0e0fc', border: '#0055aa' } },
-        font: { size: 12, face: 'monospace', multi: true },
-        borderWidth: 2,
-        margin: 10,
-    });
-
-    // Router nodes
+    const hops = data.hops || [];
     const routers = data.routers || [];
-    routers.forEach((r, i) => {
-        const modeColors = {
-            'healthy': { background: '#e6f4ee', border: '#00a67e' },
-            'impaired': { background: '#fff3e0', border: '#ff9800' },
-            'link_down': { background: '#fde8e8', border: '#dc3545' },
-        };
-        const colors = modeColors[r.current_mode] || { background: '#f7f9fc', border: '#d4dbe6' };
-        const ifaceLabel = r.selected_interface || '';
-        const modeLabel = r.current_mode ? r.current_mode.toUpperCase().replace('_', ' ') : 'IDLE';
-        let impairLabel = '';
-        if (r.current_mode === 'impaired' && r.impairment_config) {
-            const ic = r.impairment_config;
-            const parts = [];
-            if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-            if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-            if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-            if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-            impairLabel = parts.length ? '\n' + parts.join(' / ') : '';
+    const protocols = data.protocols || [];
+    const runningProtos = protocols.filter(p => p.running);
+    topoHasTraffic = runningProtos.length > 0;
+
+    // Build router IP lookup for impairment overlay
+    const routerByIp = {};
+    routers.forEach(r => { routerByIp[r.ip] = r; });
+
+    // Protocol label
+    const protoNames = runningProtos.map(p => {
+        const base = p.name.split('_')[0];
+        return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+    });
+    const protoLabel = [...new Set(protoNames)].join(', ');
+
+    // Stats summary
+    let totalSent = 0, totalRecv = 0;
+    runningProtos.forEach(p => {
+        if (p.stats) { totalSent += (p.stats.bytes_sent || 0); totalRecv += (p.stats.bytes_recv || 0); }
+    });
+
+    const activeColor = topoHasTraffic ? '#00a67e' : '#0066cc';
+    const edgeWidth = topoHasTraffic ? 3 : 2;
+
+    // CLIENT node
+    nodes.add({
+        id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
+        color: { background: '#e6f4ee', border: '#00a67e' },
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
+    });
+
+    // HOP nodes from traceroute
+    const nodeIds = ['client'];
+    hops.forEach((h, i) => {
+        const isLast = i === hops.length - 1;
+        const hopId = 'hop_' + h.hop;
+        const isTimeout = h.ip === '*';
+        const router = routerByIp[h.ip];
+
+        let bg = '#e8f0fe', border = '#0066cc', label = '';
+        if (isTimeout) {
+            bg = '#fde8e8'; border = '#dc3545';
+            label = 'HOP ' + h.hop + '\n* (timeout)';
+        } else if (router) {
+            const mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
+            const c = mc[router.current_mode] || { bg: '#e8f0fe', b: '#0066cc' };
+            bg = c.bg; border = c.b;
+            const mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
+            label = router.name + '\n' + h.ip + '\n' + mode;
+            if (router.current_mode === 'impaired' && router.impairment_config) {
+                const ic = router.impairment_config;
+                const parts = [];
+                if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
+                if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
+                if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
+                if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
+                if (parts.length) label += '\n' + parts.join(' / ');
+            }
+        } else {
+            label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
         }
 
-        nodes.add({
-            id: 'router_' + r.router_id,
-            label: r.name + '\n' + r.ip + (ifaceLabel ? ' (' + ifaceLabel + ')' : '') + '\n' + modeLabel + impairLabel,
-            shape: 'box',
-            color: { background: colors.background, border: colors.border, highlight: { background: colors.background, border: colors.border } },
-            font: { size: 11, face: 'monospace', multi: true },
-            borderWidth: 2,
-            margin: 10,
-        });
-
-        // Client → Router edge
-        edges.add({
-            id: 'c2r_' + r.router_id,
-            from: 'client',
-            to: 'router_' + r.router_id,
-            arrows: 'to',
-            color: { color: colors.border, highlight: colors.border },
-            width: 2,
-            smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 },
-        });
-
-        // Router → Server edge
-        edges.add({
-            id: 'r2s_' + r.router_id,
-            from: 'router_' + r.router_id,
-            to: 'server',
-            arrows: 'to',
-            color: { color: colors.border, highlight: colors.border },
-            width: 2,
-            smooth: { type: 'curvedCW', roundness: 0.1 + i * 0.1 },
-        });
+        // Skip last hop if it matches server (it's the destination)
+        if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
+            // Don't add — server node covers it
+        } else {
+            nodes.add({
+                id: hopId, label: label, shape: 'box',
+                color: { background: bg, border: border },
+                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10,
+            });
+            nodeIds.push(hopId);
+        }
     });
 
-    // If no routers, draw direct Client → Server edge
-    if (routers.length === 0) {
+    // SERVER node
+    nodes.add({
+        id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
+        color: { background: '#e8f0fe', border: '#0066cc' },
+        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
+    });
+    nodeIds.push('server');
+
+    // Edges connecting the chain
+    for (let i = 0; i < nodeIds.length - 1; i++) {
+        const from = nodeIds[i];
+        const to = nodeIds[i + 1];
+        const isFirst = i === 0;
         edges.add({
-            id: 'direct',
-            from: 'client',
-            to: 'server',
-            arrows: 'to',
-            color: { color: '#0066cc' },
-            width: 2,
-            dashes: true,
-            label: 'direct',
-            font: { size: 10, color: '#6b7a8d' },
+            id: 'e_' + i, from: from, to: to, arrows: 'to',
+            color: { color: topoHasTraffic ? activeColor : '#aab4c2' },
+            width: edgeWidth,
+            dashes: topoHasTraffic ? [8, 4] : false,
+            label: isFirst && protoLabel ? protoLabel : '',
+            font: { size: 9, color: '#0066cc', strokeWidth: 0 },
         });
     }
 
-    // Protocol flow labels on edges
-    const protocols = data.protocols || [];
-    if (protocols.length > 0) {
-        const protoNames = protocols.map(p => {
-            const base = p.name.split('_')[0];
-            return (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
-        });
-        const uniqueNames = [...new Set(protoNames)];
-        const label = uniqueNames.join(', ');
-
-        if (routers.length === 0) {
-            // Update direct edge label
-            edges.update({ id: 'direct', label: label, dashes: false, width: 3, color: { color: '#00a67e' } });
-        } else {
-            // Add protocol label to first router path
-            const firstRid = routers[0].router_id;
-            edges.update({ id: 'c2r_' + firstRid, label: label, font: { size: 9, color: '#0066cc' }, width: 3 });
-        }
+    // If no hops discovered, single direct edge
+    if (hops.length === 0 && nodeIds.length === 2) {
+        // Already added by the loop above
     }
 
     const options = {
-        layout: {
-            hierarchical: {
-                direction: 'LR',
-                sortMethod: 'directed',
-                levelSeparation: 200,
-                nodeSpacing: 80,
-            }
-        },
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 180, nodeSpacing: 60 } },
         physics: false,
         interaction: { dragNodes: true, zoomView: true, dragView: true },
         edges: { font: { align: 'top' } },
     };
+
+    // Stats bar below topology
+    let statsEl = document.getElementById('topology-stats');
+    if (!statsEl) {
+        statsEl = document.createElement('div');
+        statsEl.id = 'topology-stats';
+        statsEl.style.cssText = 'padding:8px 12px;font-size:11px;color:var(--text-secondary);border-top:1px solid var(--border);background:var(--bg-card)';
+        container.parentNode.appendChild(statsEl);
+    }
+    if (topoHasTraffic) {
+        const statParts = runningProtos.map(p => {
+            const base = p.name.split('_')[0];
+            const name = (PROTOCOLS[base] ? PROTOCOLS[base].name : base).toUpperCase();
+            return name + ' (' + fmtBytes(p.stats.bytes_sent || 0) + ' sent)';
+        });
+        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + [...new Set(statParts)].join(' | ');
+    } else {
+        statsEl.innerHTML = '<span style="color:var(--text-secondary)">No active traffic flows</span>';
+    }
 
     if (topoNetwork) {
         topoNetwork.setData({ nodes, edges });
     } else {
         topoNetwork = new vis.Network(container, { nodes, edges }, options);
     }
+
+    // Start/stop animation
+    if (topoHasTraffic && !topoAnimInterval) {
+        topoAnimInterval = setInterval(animateTopology, 800);
+    } else if (!topoHasTraffic && topoAnimInterval) {
+        clearInterval(topoAnimInterval);
+        topoAnimInterval = null;
+    }
+}
+
+function animateTopology() {
+    if (!topoEdges || !topoHasTraffic) return;
+    topoAnimState = (topoAnimState + 1) % 3;
+    const dashPatterns = [[8, 4], [6, 6], [4, 8]];
+    const colors = ['#00a67e', '#00b88a', '#00cc99'];
+    topoEdges.forEach(e => {
+        topoEdges.update({ id: e.id, dashes: dashPatterns[topoAnimState], color: { color: colors[topoAnimState] } });
+    });
 }
 
 // ─── Init ──────────────────────────────────────────────────
@@ -958,7 +985,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
     autoRefreshInterval = setInterval(() => { pollStatus(); pollRouterStatus(); }, 2000);
     setInterval(loadFtpFileList, 10000);
-    setInterval(refreshTopology, 30000);
+    setInterval(refreshTopology, 10000);
     pollStatus();
     refreshTopology();
     addLog('Dashboard ready.');
