@@ -263,6 +263,51 @@ DASHBOARD_HTML = r"""
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* Topology — vis.js tooltip override */
+        div.vis-tooltip {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 12px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--text-primary);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            max-width: 260px;
+            line-height: 1.5;
+        }
+        .topo-legend {
+            padding: 6px 12px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+            font-size: 11px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-card);
+            min-height: 28px;
+        }
+        .topo-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: var(--text-primary);
+        }
+        .topo-legend-dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .topo-stats {
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            border-top: 1px solid var(--border);
+            background: var(--bg-card);
+        }
+
         @media (max-width: 900px) {
             .stats-grid { grid-template-columns: repeat(2, 1fr); }
         }
@@ -1126,6 +1171,13 @@ async function clientRefreshTopology(clientName) {
     }
 }
 
+function _topoTip(lines) {
+    var el = document.createElement('div');
+    el.className = 'topo-tooltip';
+    el.innerHTML = lines.join('<br>');
+    return el;
+}
+
 function clientRenderTopology(clientName, data) {
     var container = document.getElementById('c-' + clientName + '-topo-container');
     if (!container) return;
@@ -1138,7 +1190,6 @@ function clientRenderTopology(clientName, data) {
     var pathsObj = data.paths || {};
     var routers = data.routers || [];
 
-    // Router IP lookup
     var routerByIp = {};
     routers.forEach(function(r) { routerByIp[r.ip] = r; });
 
@@ -1147,7 +1198,6 @@ function clientRenderTopology(clientName, data) {
     var hasTraffic = runningPaths.length > 0;
     clientTopoHasTraffic[clientName] = hasTraffic;
 
-    // Group paths by hop signature for merging
     var hopSigMap = {};
     pathKeys.forEach(function(k) {
         var p = pathsObj[k];
@@ -1156,21 +1206,26 @@ function clientRenderTopology(clientName, data) {
         hopSigMap[sig].push(k);
     });
 
-    // CLIENT node
-    nodes.add({ id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
+    // CLIENT node — clean circle
+    nodes.add({ id: 'client', label: 'Client', shape: 'circle', size: 28,
         color: { background: '#e6f4ee', border: '#00a67e' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12, level: 0 });
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+        borderWidth: 2, level: 0,
+        title: _topoTip(['<strong>Client</strong>', 'IP: ' + data.client_ip]) });
 
-    // SERVER node
+    // SERVER node — clean circle
     var maxHops = 1;
     pathKeys.forEach(function(k) { var h = (pathsObj[k].hops || []).length; if (h > maxHops) maxHops = h; });
-    nodes.add({ id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
+    nodes.add({ id: 'server', label: 'Server', shape: 'circle', size: 28,
         color: { background: '#e8f0fe', border: '#0066cc' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12, level: maxHops + 1 });
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+        borderWidth: 2, level: maxHops + 1,
+        title: _topoTip(['<strong>Server</strong>', 'IP: ' + data.server_host]) });
 
     var renderedSigs = {};
     var pathIndex = 0;
     var addedNodes = { client: true, server: true };
+    var legendItems = [];
 
     pathKeys.forEach(function(pathKey) {
         var path = pathsObj[pathKey];
@@ -1188,8 +1243,9 @@ function clientRenderTopology(clientName, data) {
         var color = isDefaultOnly ? '#aab4c2' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
         if (!isDefaultOnly) pathIndex++;
 
-        var pathLabel = labels.join(', ');
-        var edgeWidth = isRunning ? 3 : 2;
+        legendItems.push({ labels: labels, color: color, running: isRunning, defaultOnly: isDefaultOnly });
+
+        var edgeWidth = isRunning ? 3 : 1.5;
 
         var nodeChain = ['client'];
         for (var i = 0; i < hops.length; i++) {
@@ -1203,62 +1259,91 @@ function clientRenderTopology(clientName, data) {
             if (addedNodes[sharedId]) { nodeChain.push(sharedId); continue; }
 
             var router = routerByIp[h.ip];
-            var bg = '#e8f0fe', border = color, label = '';
+            var bg, border, nodeLabel = '', nodeSize = 12, tipLines = [];
 
             if (isTimeout) {
-                bg = '#fde8e8'; border = '#dc3545';
-                label = 'HOP ' + h.hop + '\n* (timeout)';
+                bg = '#fde8e8'; border = '#dc3545'; nodeSize = 10;
+                tipLines = ['<strong>Hop ' + h.hop + '</strong>', '<span style="color:#dc3545">* (timeout)</span>'];
             } else if (router) {
                 var mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
-                var c = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
-                bg = c.bg; border = c.b;
-                var mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
-                label = router.name + '\n' + h.ip + '\n' + mode;
+                var rc = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
+                bg = rc.bg; border = rc.b;
+                nodeLabel = router.name; nodeSize = 16;
+                var mode = router.current_mode ? router.current_mode.replace('_', ' ') : '';
+                var modeColors = { healthy: '#00a67e', impaired: '#ff9800', link_down: '#dc3545' };
+                var modeColor = modeColors[router.current_mode] || '#6b7a8d';
+                tipLines = ['<strong>' + router.name + '</strong>', 'IP: ' + h.ip,
+                    'Mode: <span style="color:' + modeColor + '">' + mode + '</span>'];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
                 if (router.current_mode === 'impaired' && router.impairment_config) {
                     var ic = router.impairment_config;
                     var parts = [];
-                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-                    if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-                    if (parts.length) label += '\n' + parts.join(' / ');
+                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms delay');
+                    if (ic.jitter_ms) parts.push(ic.jitter_ms + 'ms jitter');
+                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '% loss');
+                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + ' Mbps');
+                    if (parts.length) tipLines.push('<span style="color:#ff9800">' + parts.join(' / ') + '</span>');
                 }
             } else {
-                label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
+                bg = '#e8f0fe'; border = color;
+                tipLines = ['<strong>Hop ' + h.hop + '</strong>', 'IP: ' + h.ip];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
             }
 
-            nodes.add({ id: sharedId, label: label, shape: 'box',
+            nodes.add({ id: sharedId, label: nodeLabel, shape: 'dot', size: nodeSize,
                 color: { background: bg, border: border },
-                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10, level: i + 1 });
+                font: { size: 10, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+                borderWidth: 2, level: i + 1,
+                title: _topoTip(tipLines) });
             addedNodes[sharedId] = true;
             nodeChain.push(sharedId);
         }
         nodeChain.push('server');
 
-        var roundness = pathIndex * 0.15;
+        var roundness = pathIndex > 1 ? pathIndex * 0.15 : 0;
         for (var j = 0; j < nodeChain.length - 1; j++) {
             var edgeId = 'e_' + pathKey + '_' + j;
-            edges.add({ id: edgeId, from: nodeChain[j], to: nodeChain[j + 1], arrows: 'to',
+            edges.add({ id: edgeId, from: nodeChain[j], to: nodeChain[j + 1],
+                arrows: { to: { enabled: true, scaleFactor: 0.4 } },
                 color: { color: isRunning ? color : '#aab4c2' }, width: edgeWidth,
                 dashes: isRunning ? [8, 4] : (isDefaultOnly ? [4, 4] : false),
-                label: j === 0 ? pathLabel : '',
-                font: { size: 9, color: color, strokeWidth: 0, background: 'rgba(255,255,255,0.7)' },
-                smooth: pathIndex > 1 ? { type: 'curvedCW', roundness: roundness } : { type: 'dynamic' } });
+                smooth: roundness > 0 ? { type: 'curvedCW', roundness: roundness } : { type: 'cubicBezier' } });
             if (isRunning) clientTopoActiveEdgeIds[clientName].push({ id: edgeId, color: color });
         }
     });
 
     if (pathKeys.length === 0) {
-        edges.add({ id: 'e_direct', from: 'client', to: 'server', arrows: 'to',
-            color: { color: '#aab4c2' }, width: 2, dashes: [4, 4],
-            label: 'No path data', font: { size: 9, color: '#aab4c2', strokeWidth: 0 } });
+        edges.add({ id: 'e_direct', from: 'client', to: 'server',
+            arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+            color: { color: '#aab4c2' }, width: 1.5, dashes: [4, 4] });
     }
 
     var options = {
-        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 180, nodeSpacing: 60 } },
-        physics: false, interaction: { dragNodes: true, zoomView: true, dragView: true },
-        edges: { font: { align: 'top' } }
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 140, nodeSpacing: 50 } },
+        physics: false,
+        interaction: { hover: true, tooltipDelay: 100, dragNodes: true, zoomView: true, dragView: true }
     };
+
+    // Protocol legend bar
+    var legendId = 'c-' + clientName + '-topo-legend';
+    var legendEl = document.getElementById(legendId);
+    if (!legendEl) {
+        legendEl = document.createElement('div');
+        legendEl.id = legendId;
+        legendEl.className = 'topo-legend';
+        container.parentNode.insertBefore(legendEl, container.nextSibling);
+    }
+    if (legendItems.length > 0) {
+        legendEl.innerHTML = legendItems.map(function(li) {
+            var names = li.labels.join(', ');
+            var opacity = li.running ? '1' : '0.5';
+            return '<span class="topo-legend-item" style="opacity:' + opacity + '">' +
+                '<span class="topo-legend-dot" style="background:' + li.color + '"></span>' +
+                names + '</span>';
+        }).join('');
+    } else {
+        legendEl.innerHTML = '';
+    }
 
     // Stats bar
     var statsId = 'c-' + clientName + '-topo-stats';
@@ -1266,7 +1351,7 @@ function clientRenderTopology(clientName, data) {
     if (!statsEl) {
         statsEl = document.createElement('div');
         statsEl.id = statsId;
-        statsEl.style.cssText = 'padding:8px 12px;font-size:11px;color:var(--text-secondary);border-top:1px solid var(--border);background:var(--bg-card)';
+        statsEl.className = 'topo-stats';
         container.parentNode.appendChild(statsEl);
     }
     if (hasTraffic) {

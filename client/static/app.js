@@ -822,6 +822,13 @@ async function refreshTopology() {
     }
 }
 
+function _topoTooltip(lines) {
+    const el = document.createElement('div');
+    el.className = 'topo-tooltip';
+    el.innerHTML = lines.join('<br>');
+    return el;
+}
+
 function renderTopology(data) {
     const container = document.getElementById('topology-container');
     if (!container) return;
@@ -834,11 +841,9 @@ function renderTopology(data) {
     const pathsObj = data.paths || {};
     const routers = data.routers || [];
 
-    // Build router IP lookup
     const routerByIp = {};
     routers.forEach(r => { routerByIp[r.ip] = r; });
 
-    // Separate running paths from default
     const pathKeys = Object.keys(pathsObj);
     const runningPaths = pathKeys.filter(k => k !== 'default' && pathsObj[k].running);
     topoHasTraffic = runningPaths.length > 0;
@@ -852,39 +857,38 @@ function renderTopology(data) {
         hopSigMap[sig].push(k);
     });
 
-    // CLIENT node
+    // CLIENT node — clean circle
     nodes.add({
-        id: 'client', label: 'CLIENT\n' + data.client_ip, shape: 'box',
+        id: 'client', label: 'Client', shape: 'circle', size: 28,
         color: { background: '#e6f4ee', border: '#00a67e' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
-        level: 0,
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+        borderWidth: 2, level: 0,
+        title: _topoTooltip(['<strong>Client</strong>', 'IP: ' + data.client_ip]),
     });
 
-    // SERVER node (rightmost)
+    // SERVER node — clean circle
     const maxHops = Math.max(1, ...pathKeys.map(k => (pathsObj[k].hops || []).length));
     nodes.add({
-        id: 'server', label: 'SERVER\n' + data.server_host, shape: 'box',
+        id: 'server', label: 'Server', shape: 'circle', size: 28,
         color: { background: '#e8f0fe', border: '#0066cc' },
-        font: { size: 13, face: 'monospace', bold: true, multi: true }, borderWidth: 2, margin: 12,
-        level: maxHops + 1,
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+        borderWidth: 2, level: maxHops + 1,
+        title: _topoTooltip(['<strong>Server</strong>', 'IP: ' + data.server_host]),
     });
 
-    // Track which unique paths we've rendered (by hop signature)
     const renderedSigs = new Set();
     let pathIndex = 0;
     const addedNodes = new Set(['client', 'server']);
+    const legendItems = [];
 
-    // Render each unique path
     pathKeys.forEach(pathKey => {
         const path = pathsObj[pathKey];
         const hops = path.hops || [];
         const sig = hops.map(h => h.ip).join(',');
 
-        // Check if this signature was already rendered by a merged group
         if (renderedSigs.has(sig)) return;
         renderedSigs.add(sig);
 
-        // Find all protocols sharing this path
         const mergedKeys = hopSigMap[sig] || [pathKey];
         const labels = mergedKeys.map(k => pathsObj[k].label);
         const isRunning = mergedKeys.some(k => k !== 'default' && pathsObj[k].running);
@@ -893,106 +897,120 @@ function renderTopology(data) {
         const color = isDefaultOnly ? '#aab4c2' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
         if (!isDefaultOnly) pathIndex++;
 
-        const pathLabel = labels.join(', ');
-        const edgeWidth = isRunning ? 3 : 2;
+        // Add to legend
+        legendItems.push({ labels, color, running: isRunning, defaultOnly: isDefaultOnly });
 
-        // Create hop nodes for this path
+        const edgeWidth = isRunning ? 3 : 1.5;
+
+        // Create hop nodes — clean dots with tooltip
         const nodeChain = ['client'];
         hops.forEach((h, i) => {
             const isLast = i === hops.length - 1;
             const isTimeout = h.ip === '*';
-            // Unique node ID per path to allow divergent paths
-            const hopId = 'hop_' + pathKey + '_' + h.hop;
 
-            // Skip last hop if it matches server
-            if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) {
-                return;
-            }
+            if (isLast && !isTimeout && (h.ip === data.server_host || h.ip === data.client_ip)) return;
 
-            // Reuse node if same IP already exists at same level from another path
             const sharedId = 'hop_shared_' + h.hop + '_' + h.ip;
-            if (addedNodes.has(sharedId)) {
-                nodeChain.push(sharedId);
-                return;
-            }
+            if (addedNodes.has(sharedId)) { nodeChain.push(sharedId); return; }
 
             const router = routerByIp[h.ip];
-            let bg = '#e8f0fe', border = color, label = '';
+            let bg, border, nodeLabel = '', nodeSize = 12, tipLines = [];
 
             if (isTimeout) {
-                bg = '#fde8e8'; border = '#dc3545';
-                label = 'HOP ' + h.hop + '\n* (timeout)';
+                bg = '#fde8e8'; border = '#dc3545'; nodeSize = 10;
+                tipLines = ['<strong>Hop ' + h.hop + '</strong>', '<span style="color:#dc3545">* (timeout)</span>'];
             } else if (router) {
                 const mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
                 const c = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
                 bg = c.bg; border = c.b;
-                const mode = router.current_mode ? router.current_mode.toUpperCase().replace('_', ' ') : '';
-                label = router.name + '\n' + h.ip + '\n' + mode;
+                nodeLabel = router.name; nodeSize = 16;
+                const mode = router.current_mode ? router.current_mode.replace('_', ' ') : '';
+                const modeColor = { healthy: '#00a67e', impaired: '#ff9800', link_down: '#dc3545' }[router.current_mode] || '#6b7a8d';
+                tipLines = ['<strong>' + router.name + '</strong>', 'IP: ' + h.ip,
+                    'Mode: <span style="color:' + modeColor + '">' + mode + '</span>'];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
                 if (router.current_mode === 'impaired' && router.impairment_config) {
                     const ic = router.impairment_config;
                     const parts = [];
-                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms');
-                    if (ic.jitter_ms) parts.push('j' + ic.jitter_ms + 'ms');
-                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '%loss');
-                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + 'Mbps');
-                    if (parts.length) label += '\n' + parts.join(' / ');
+                    if (ic.latency_ms) parts.push(ic.latency_ms + 'ms delay');
+                    if (ic.jitter_ms) parts.push(ic.jitter_ms + 'ms jitter');
+                    if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '% loss');
+                    if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + ' Mbps');
+                    if (parts.length) tipLines.push('<span style="color:#ff9800">' + parts.join(' / ') + '</span>');
                 }
             } else {
-                label = 'HOP ' + h.hop + '\n' + h.ip + (h.rtt !== '--' ? '\n' + h.rtt + ' ms' : '');
+                bg = '#e8f0fe'; border = color;
+                tipLines = ['<strong>Hop ' + h.hop + '</strong>', 'IP: ' + h.ip];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
             }
 
-            const useId = sharedId;
             nodes.add({
-                id: useId, label: label, shape: 'box',
+                id: sharedId, label: nodeLabel, shape: 'dot', size: nodeSize,
                 color: { background: bg, border: border },
-                font: { size: 11, face: 'monospace', multi: true }, borderWidth: 2, margin: 10,
-                level: i + 1,
+                font: { size: 10, face: '-apple-system, sans-serif', color: '#1e2a3a' },
+                borderWidth: 2, level: i + 1,
+                title: _topoTooltip(tipLines),
             });
-            addedNodes.add(useId);
-            nodeChain.push(useId);
+            addedNodes.add(sharedId);
+            nodeChain.push(sharedId);
         });
         nodeChain.push('server');
 
-        // Create edges for this path
-        const roundness = pathIndex * 0.15;
+        // Edges — no labels, clean lines
+        const roundness = pathIndex > 1 ? pathIndex * 0.15 : 0;
         for (let i = 0; i < nodeChain.length - 1; i++) {
             const edgeId = 'e_' + pathKey + '_' + i;
-            const isFirst = i === 0;
             edges.add({
-                id: edgeId, from: nodeChain[i], to: nodeChain[i + 1], arrows: 'to',
+                id: edgeId, from: nodeChain[i], to: nodeChain[i + 1],
+                arrows: { to: { enabled: true, scaleFactor: 0.4 } },
                 color: { color: isRunning ? color : '#aab4c2' },
                 width: edgeWidth,
                 dashes: isRunning ? [8, 4] : (isDefaultOnly ? [4, 4] : false),
-                label: isFirst ? pathLabel : '',
-                font: { size: 9, color: color, strokeWidth: 0, background: 'rgba(255,255,255,0.7)' },
-                smooth: pathIndex > 1 ? { type: 'curvedCW', roundness: roundness } : { type: 'dynamic' },
+                smooth: roundness > 0 ? { type: 'curvedCW', roundness } : { type: 'cubicBezier' },
             });
-            if (isRunning) topoActiveEdgeIds.push({ id: edgeId, color: color });
+            if (isRunning) topoActiveEdgeIds.push({ id: edgeId, color });
         }
     });
 
-    // If no paths at all, direct client → server edge
     if (pathKeys.length === 0) {
         edges.add({
-            id: 'e_direct', from: 'client', to: 'server', arrows: 'to',
-            color: { color: '#aab4c2' }, width: 2, dashes: [4, 4],
-            label: 'No path data', font: { size: 9, color: '#aab4c2', strokeWidth: 0 },
+            id: 'e_direct', from: 'client', to: 'server',
+            arrows: { to: { enabled: true, scaleFactor: 0.4 } },
+            color: { color: '#aab4c2' }, width: 1.5, dashes: [4, 4],
         });
     }
 
     const options = {
-        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 180, nodeSpacing: 60 } },
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 140, nodeSpacing: 50 } },
         physics: false,
-        interaction: { dragNodes: true, zoomView: true, dragView: true },
-        edges: { font: { align: 'top' } },
+        interaction: { hover: true, tooltipDelay: 100, dragNodes: true, zoomView: true, dragView: true },
     };
 
-    // Stats bar below topology
+    // Protocol legend bar
+    let legendEl = document.getElementById('topology-legend');
+    if (!legendEl) {
+        legendEl = document.createElement('div');
+        legendEl.id = 'topology-legend';
+        legendEl.className = 'topo-legend';
+        container.parentNode.insertBefore(legendEl, container.nextSibling);
+    }
+    if (legendItems.length > 0) {
+        legendEl.innerHTML = legendItems.map(li => {
+            const names = li.labels.join(', ');
+            const opacity = li.running ? '1' : '0.5';
+            const dot = `<span class="topo-legend-dot" style="background:${li.color}"></span>`;
+            return `<span class="topo-legend-item" style="opacity:${opacity}">${dot}${names}</span>`;
+        }).join('');
+    } else {
+        legendEl.innerHTML = '';
+    }
+
+    // Stats bar
     let statsEl = document.getElementById('topology-stats');
     if (!statsEl) {
         statsEl = document.createElement('div');
         statsEl.id = 'topology-stats';
-        statsEl.style.cssText = 'padding:8px 12px;font-size:11px;color:var(--text-secondary);border-top:1px solid var(--border);background:var(--bg-card)';
+        statsEl.className = 'topo-stats';
         container.parentNode.appendChild(statsEl);
     }
     if (topoHasTraffic) {
@@ -1011,7 +1029,6 @@ function renderTopology(data) {
         topoNetwork = new vis.Network(container, { nodes, edges }, options);
     }
 
-    // Start/stop animation
     if (topoHasTraffic && !topoAnimInterval) {
         topoAnimInterval = setInterval(animateTopology, 800);
     } else if (!topoHasTraffic && topoAnimInterval) {
