@@ -438,7 +438,7 @@ function toggleAdvanced(clientName, proto) {
 }
 // ─── Protocol Definitions ────────────────────────────────────
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
-const ADVANCED_KEYS = ['dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
+const ADVANCED_KEYS = ['proxy', 'dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
 
 const PROTOCOLS = {
     https: { name: 'HTTPS', fields: [
@@ -450,6 +450,7 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -489,6 +490,7 @@ const PROTOCOLS = {
         { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -502,6 +504,7 @@ const PROTOCOLS = {
         { key: 'port', label: 'Port', type: 'number', default: 53 },
         { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\\namazon.com\\nmicrosoft.com\\ngithub.com\\ncloudflare.com' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -517,6 +520,7 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'password', default: '' },
         { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -532,6 +536,7 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
         { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -545,6 +550,7 @@ const PROTOCOLS = {
         { key: 'method', label: 'Method', type: 'select', options: ['GET','POST','HEAD'], default: 'GET' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -793,6 +799,31 @@ async function renderClientTab(name) {
         '<button class="btn btn-primary" onclick="clientApplySourceIps(\'' + name + '\')" style="padding:4px 10px">Apply</button>' +
         '</div><div id="c-' + name + '-source-ip-list" style="margin-top:6px;font-size:10px;color:var(--text-secondary)"></div></div>' +
         '</div></div></div>' +
+        // Proxy Configuration
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-proxy\')"><span>Proxy Configuration</span><span class="chevron" id="chevron-c-' + name + '-proxy">&#9654;</span></div>' +
+        '<div class="card-body" id="section-c-' + name + '-proxy" style="display:none">' +
+        '<div style="padding:8px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">' +
+        '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
+        '<input type="checkbox" id="c-' + name + '-proxy-enabled">' +
+        '<strong style="font-size:12px">Enable Proxy</strong>' +
+        '<span style="font-size:11px;color:var(--text-secondary)">(route traffic via proxy server)</span></label>' +
+        '<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12px">' +
+        '<label style="color:var(--text-secondary)">Type</label>' +
+        '<select id="c-' + name + '-proxy-type" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">' +
+        '<option value="http">HTTP/HTTPS</option><option value="socks5">SOCKS5</option></select>' +
+        '<label style="color:var(--text-secondary)">Host</label>' +
+        '<input type="text" id="c-' + name + '-proxy-host" placeholder="proxy.example.com" style="padding:4px 8px;' + inputStyle + '">' +
+        '<label style="color:var(--text-secondary)">Port</label>' +
+        '<input type="number" id="c-' + name + '-proxy-port" value="8080" style="padding:4px 8px;' + inputStyle + 'width:100px">' +
+        '<label style="color:var(--text-secondary)">Username</label>' +
+        '<input type="text" id="c-' + name + '-proxy-username" placeholder="(optional)" style="padding:4px 8px;' + inputStyle + '">' +
+        '<label style="color:var(--text-secondary)">Password</label>' +
+        '<input type="password" id="c-' + name + '-proxy-password" placeholder="(optional)" style="padding:4px 8px;' + inputStyle + '">' +
+        '</div>' +
+        '<div style="margin-top:8px;display:flex;gap:6px">' +
+        '<button class="btn btn-primary" onclick="clientSaveProxy(\'' + name + '\')" style="padding:4px 12px">Apply</button>' +
+        '<button class="btn btn-secondary" onclick="clientTestProxy(\'' + name + '\')" style="padding:4px 12px">Test</button>' +
+        '</div></div></div></div>' +
         // Protocol cards
         '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-protos\')"><span>Traffic Generators</span>' +
         '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
@@ -1148,6 +1179,58 @@ async function clientLoadSourceIps(clientName) {
         const list = document.getElementById('c-' + clientName + '-source-ip-list');
         if (list && data.ips && data.ips.length) list.textContent = 'Active: ' + data.ips.join(', ');
     } catch(e) {}
+}
+
+// ─── Client Proxy ───────────────────────────────────────────
+async function clientLoadProxy(clientName) {
+    try {
+        var resp = await fetch('/api/client/' + clientName + '/proxy');
+        var data = await resp.json();
+        var el = function(id) { return document.getElementById('c-' + clientName + '-proxy-' + id); };
+        if (el('enabled')) el('enabled').checked = !!data.enabled;
+        if (el('type')) el('type').value = data.type || 'http';
+        if (el('host')) el('host').value = data.host || '';
+        if (el('port')) el('port').value = data.port || 8080;
+        if (el('username')) el('username').value = data.username || '';
+        if (el('password')) el('password').value = data.password || '';
+    } catch(e) {}
+}
+
+async function clientSaveProxy(clientName) {
+    var el = function(id) { return document.getElementById('c-' + clientName + '-proxy-' + id); };
+    var payload = {
+        enabled: el('enabled') ? el('enabled').checked : false,
+        type: el('type') ? el('type').value : 'http',
+        host: el('host') ? el('host').value.trim() : '',
+        port: el('port') ? parseInt(el('port').value) : 8080,
+        username: el('username') ? el('username').value.trim() : '',
+        password: el('password') ? el('password').value : ''
+    };
+    var res = await apiPost('/api/client/' + clientName + '/proxy', payload);
+    addClientLog(clientName, '[PROXY] ' + (res.message || 'Config updated'));
+    showNotification(res.message || 'Proxy config updated', 'success');
+}
+
+async function clientTestProxy(clientName) {
+    var el = function(id) { return document.getElementById('c-' + clientName + '-proxy-' + id); };
+    var payload = {
+        type: el('type') ? el('type').value : 'http',
+        host: el('host') ? el('host').value.trim() : '',
+        port: el('port') ? parseInt(el('port').value) : 8080,
+        username: el('username') ? el('username').value.trim() : '',
+        password: el('password') ? el('password').value : ''
+    };
+    showNotification('Testing proxy...', 'info');
+    try {
+        var resp = await fetch('/api/client/' + clientName + '/proxy/test', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+        });
+        var data = await resp.json();
+        showNotification(data.message || 'Test done', data.ok ? 'success' : 'error');
+        addClientLog(clientName, '[PROXY] Test: ' + (data.message || ''));
+    } catch(e) {
+        showNotification('Proxy test failed: ' + e.message, 'error');
+    }
 }
 
 // ─── Client Topology ────────────────────────────────────────
@@ -1612,7 +1695,7 @@ async function addClient() {
         hideAddClient();
         document.getElementById('client-name').value = '';
         document.getElementById('client-url').value = '';
-        clientLoadRouters(name); clientLoadSourceIps(name); clientRefreshTopology(name);
+        clientLoadRouters(name); clientLoadSourceIps(name); clientLoadProxy(name); clientRefreshTopology(name);
         switchTab(name);
     }
 }
@@ -1635,7 +1718,7 @@ async function loadClients() {
         clientList = data;
         for (const name of Object.keys(data)) {
             renderClientTab(name);
-            clientLoadRouters(name); clientLoadSourceIps(name); clientRefreshTopology(name);
+            clientLoadRouters(name); clientLoadSourceIps(name); clientLoadProxy(name); clientRefreshTopology(name);
         }
         rebuildTabs();
     } catch(e) {}
@@ -1990,6 +2073,21 @@ def client_source_ips(name):
         result, code = proxy_to_client(name, '/api/source_ips', 'POST', request.json or {})
     else:
         result, code = proxy_to_client(name, '/api/source_ips')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/proxy', methods=['GET', 'POST'])
+def client_proxy(name):
+    if request.method == 'POST':
+        result, code = proxy_to_client(name, '/api/proxy', 'POST', request.json or {})
+    else:
+        result, code = proxy_to_client(name, '/api/proxy')
+    return jsonify(result), code
+
+
+@app.route('/api/client/<name>/proxy/test', methods=['POST'])
+def client_proxy_test(name):
+    result, code = proxy_to_client(name, '/api/proxy/test', 'POST', request.json or {})
     return jsonify(result), code
 
 

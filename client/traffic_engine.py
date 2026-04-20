@@ -19,6 +19,7 @@ import requests
 from requests.adapters import HTTPAdapter
 import httpx
 import paramiko
+import socks
 import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -207,6 +208,35 @@ class TrafficEngine:
             for job in self.jobs.values():
                 job.stats = {"bytes_sent": 0, "bytes_recv": 0, "requests": 0, "errors": 0}
 
+    @staticmethod
+    def _get_proxy_url(cfg):
+        """Build proxy URL from config if proxy is enabled."""
+        proxy = cfg.get('_proxy')
+        if not proxy or not proxy.get('enabled'):
+            return None
+        ptype = proxy.get('type', 'http')
+        host = proxy.get('host', '')
+        port = proxy.get('port', 8080)
+        user = proxy.get('username', '')
+        pwd = proxy.get('password', '')
+        if not host:
+            return None
+        auth = f"{user}:{pwd}@" if user else ""
+        if ptype == 'socks5':
+            return f"socks5h://{auth}{host}:{port}"
+        return f"http://{auth}{host}:{port}"
+
+    @staticmethod
+    def _get_proxy_socks_params(cfg):
+        """Return (type, host, port, username, password) for SOCKS proxy, or None."""
+        proxy = cfg.get('_proxy')
+        if not proxy or not proxy.get('enabled'):
+            return None
+        if proxy.get('type') != 'socks5':
+            return None
+        return (socks.SOCKS5, proxy['host'], int(proxy.get('port', 1080)),
+                proxy.get('username') or None, proxy.get('password') or None)
+
     # ─── HTTP / HTTPS ───────────────────────────────────────
 
     def _run_https(self, job: TrafficJob):
@@ -224,16 +254,24 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
+        proxy_url = self._get_proxy_url(cfg)
         proto_label = "HTTP/2" if use_http2 else "HTTPS"
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        job.log(f"{proto_label} {method} {url} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"{proto_label} {method} {url} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
 
         if use_http2:
             sock_opts = []
             if tos > 0:
                 sock_opts = [(socket.IPPROTO_IP, socket.IP_TOS, tos)]
+            transport_kwargs = {}
+            if sock_opts:
+                transport_kwargs['socket_options'] = sock_opts
+            if proxy_url:
+                transport_kwargs['proxy'] = proxy_url
+            transport = httpx.HTTPTransport(**transport_kwargs) if transport_kwargs else None
             client = httpx.Client(http2=True, verify=verify_ssl, timeout=60,
-                                  transport=httpx.HTTPTransport(socket_options=sock_opts) if sock_opts else None)
+                                  transport=transport, proxy=proxy_url if (proxy_url and not transport_kwargs.get('proxy')) else None)
             try:
                 while not job.should_stop():
                     for _ in range(burst_count):
@@ -286,6 +324,8 @@ class TrafficEngine:
             if tos > 0:
                 adapter = DscpHTTPAdapter(tos=tos)
                 session.mount('https://', adapter)
+            if proxy_url:
+                session.proxies = {'https': proxy_url, 'http': proxy_url}
 
             while not job.should_stop():
                 for _ in range(burst_count):
@@ -347,13 +387,17 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
+        proxy_url = self._get_proxy_url(cfg)
         base_url = f"http://{host}:{port}"
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        job.log(f"HTTP {method} {base_url} data_size={data_size_kb}KB interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"HTTP {method} {base_url} data_size={data_size_kb}KB interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
 
         session = requests.Session()
         adapter = DscpHTTPAdapter(tos=tos, max_retries=3)
         session.mount('http://', adapter)
+        if proxy_url:
+            session.proxies = {'http': proxy_url, 'https': proxy_url}
 
         while not job.should_stop():
             for _ in range(burst_count):
@@ -410,10 +454,19 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
+        socks_params = self._get_proxy_socks_params(cfg)
+        proxy_url = self._get_proxy_url(cfg)
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        job.log(f"DNS queries → {host}:{port} domains={len(domains)} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"DNS queries → {host}:{port} domains={len(domains)} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        if socks_params:
+            sock = socks.socksocket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.set_proxy(*socks_params)
+        else:
+            if proxy_url and 'socks' not in (proxy_url or ''):
+                job.log("Note: HTTP proxy not supported for DNS — sending direct")
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.settimeout(5)
         _set_tos(sock, tos)
 
@@ -562,12 +615,29 @@ class TrafficEngine:
         tos = _dscp_to_tos(dscp)
         ftp_files = ['testfile_100mb.bin']
 
-        job.log(f"FTP continuous download from {host}:{port} random_size={random_size} DSCP={dscp}(TOS={tos})")
+        socks_params = self._get_proxy_socks_params(cfg)
+        proxy_url = self._get_proxy_url(cfg)
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"FTP continuous download from {host}:{port} random_size={random_size} DSCP={dscp}(TOS={tos}){proxy_str}")
+
+        if proxy_url and not socks_params:
+            job.log("Note: HTTP proxy not supported for FTP — use SOCKS5 proxy instead")
 
         while not job.should_stop():
             try:
                 ftp = ftplib.FTP()
-                ftp.connect(host, port, timeout=30)
+                if socks_params:
+                    # Create SOCKS5-wrapped socket for FTP
+                    sock = socks.socksocket()
+                    sock.set_proxy(*socks_params)
+                    sock.connect((host, port))
+                    sock.settimeout(30)
+                    ftp.sock = sock
+                    ftp.af = sock.family
+                    ftp.file = sock.makefile('r', encoding=ftp.encoding)
+                    ftp.welcome = ftp.getresp()
+                else:
+                    ftp.connect(host, port, timeout=30)
                 if tos > 0:
                     _set_tos(ftp.sock, tos)
                 ftp.login(username, password)
@@ -627,8 +697,11 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
+        socks_params = self._get_proxy_socks_params(cfg)
+        proxy_url = self._get_proxy_url(cfg)
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        job.log(f"SSH {username}@{host}:{port} cmd='{command}' interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"SSH {username}@{host}:{port} cmd='{command}' interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
 
         ssh_opts = [
             '-o', 'StrictHostKeyChecking=no',
@@ -638,6 +711,20 @@ class TrafficEngine:
             '-o', f'ServerAliveInterval=15',
             '-p', str(port),
         ]
+
+        # Add proxy command for SSH tunneling
+        proxy_cfg = cfg.get('_proxy')
+        if proxy_cfg and proxy_cfg.get('enabled') and proxy_cfg.get('host'):
+            p_host = proxy_cfg['host']
+            p_port = proxy_cfg.get('port', 1080)
+            if proxy_cfg.get('type') == 'socks5':
+                # Use nc with SOCKS5 proxy (netcat-openbsd supports -X 5 -x)
+                proxy_cmd = f"nc -X 5 -x {p_host}:{p_port} %h %p"
+                ssh_opts.extend(['-o', f'ProxyCommand={proxy_cmd}'])
+            else:
+                # HTTP CONNECT proxy
+                proxy_cmd = f"nc -X connect -x {p_host}:{p_port} %h %p"
+                ssh_opts.extend(['-o', f'ProxyCommand={proxy_cmd}'])
 
         while not job.should_stop():
             for _ in range(burst_count):
@@ -686,8 +773,10 @@ class TrafficEngine:
         dscp = cfg.get('dscp', 'BE')
         tos = _dscp_to_tos(dscp)
 
+        proxy_url = self._get_proxy_url(cfg)
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        job.log(f"External HTTPS {method} → {len(urls)} URL(s) interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos})")
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"External HTTPS {method} → {len(urls)} URL(s) interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
         for i, u in enumerate(urls):
             job.log(f"  URL[{i}]: {u}")
 
@@ -696,6 +785,8 @@ class TrafficEngine:
             adapter = DscpHTTPAdapter(tos=tos)
             session.mount('http://', adapter)
             session.mount('https://', adapter)
+        if proxy_url:
+            session.proxies = {'https': proxy_url, 'http': proxy_url}
         session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',

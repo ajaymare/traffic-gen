@@ -40,10 +40,10 @@
             <span>Traffic Topology</span>
             <div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">
                 <button class="btn btn-secondary" onclick="refreshTopology()" style="padding:3px 10px;font-size:10px">Refresh</button>
-                <span class="chevron" id="chevron-topology">&#9654;</span>
+                <span class="chevron collapsed" id="chevron-topology">&#9660;</span>
             </div>
         </div>
-        <div class="card-body" id="section-topology" style="display:none">
+        <div class="card-body collapsed" id="section-topology">
             <div id="topology-container" style="width:100%;height:350px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sub)"></div>
         </div>
     </div>
@@ -93,6 +93,42 @@
                         <button class="btn btn-primary" onclick="applySourceIps()" style="padding:4px 10px">Apply</button>
                     </div>
                     <div id="source-ip-list" style="margin-top:6px;font-size:10px;color:var(--text-secondary)"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Proxy Configuration -->
+    <div class="card">
+        <div class="card-header" onclick="toggleSection('proxy')">
+            <span>Proxy Configuration</span>
+            <span class="chevron collapsed" id="chevron-proxy">&#9660;</span>
+        </div>
+        <div class="card-body collapsed" id="section-proxy">
+            <div style="padding:8px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">
+                <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                    <input type="checkbox" id="proxy-enabled">
+                    <strong style="font-size:12px">Enable Proxy</strong>
+                    <span style="font-size:11px;color:var(--text-secondary)">(route traffic via proxy server)</span>
+                </label>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center;font-size:12px">
+                    <label style="color:var(--text-secondary)">Type</label>
+                    <select id="proxy-type" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                        <option value="http">HTTP/HTTPS</option>
+                        <option value="socks5">SOCKS5</option>
+                    </select>
+                    <label style="color:var(--text-secondary)">Host</label>
+                    <input type="text" id="proxy-host" placeholder="proxy.example.com" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                    <label style="color:var(--text-secondary)">Port</label>
+                    <input type="number" id="proxy-port" value="8080" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px;width:100px">
+                    <label style="color:var(--text-secondary)">Username</label>
+                    <input type="text" id="proxy-username" placeholder="(optional)" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                    <label style="color:var(--text-secondary)">Password</label>
+                    <input type="password" id="proxy-password" placeholder="(optional)" style="padding:4px 8px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;font-size:12px">
+                </div>
+                <div style="margin-top:8px;display:flex;gap:6px">
+                    <button class="btn btn-primary" onclick="saveProxy()" style="padding:4px 12px">Apply</button>
+                    <button class="btn btn-secondary" id="proxy-test-btn" onclick="testProxy()" style="padding:4px 12px">Test</button>
                 </div>
             </div>
         </div>

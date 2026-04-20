@@ -1,7 +1,7 @@
 const SRV = (typeof SERVER_HOST !== 'undefined') ? SERVER_HOST : 'server';
 
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
-const ADVANCED_KEYS = ['dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
+const ADVANCED_KEYS = ['proxy', 'dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
 
 const PROTOCOLS = {
     https: {
@@ -16,6 +16,7 @@ const PROTOCOLS = {
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -67,6 +68,7 @@ const PROTOCOLS = {
             { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -84,6 +86,7 @@ const PROTOCOLS = {
             { key: 'port', label: 'Port', type: 'number', default: 53 },
             { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -104,6 +107,7 @@ const PROTOCOLS = {
             { key: 'password', label: 'Password', type: 'password', default: '' },
             { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
@@ -118,6 +122,7 @@ const PROTOCOLS = {
             { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
             { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -135,6 +140,7 @@ const PROTOCOLS = {
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'HEAD'], default: 'GET' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -779,6 +785,70 @@ async function loadSourceIps() {
 }
 
 
+// ─── Proxy Configuration ────────────────────────────────────
+
+async function loadProxy() {
+    try {
+        const resp = await fetch('/api/proxy');
+        const cfg = await resp.json();
+        const el = id => document.getElementById('proxy-' + id);
+        if (el('enabled')) el('enabled').checked = cfg.enabled;
+        if (el('type')) el('type').value = cfg.type || 'http';
+        if (el('host')) el('host').value = cfg.host || '';
+        if (el('port')) el('port').value = cfg.port || 8080;
+        if (el('username')) el('username').value = cfg.username || '';
+        if (el('password')) el('password').value = cfg.password || '';
+    } catch(e) {}
+}
+
+async function saveProxy() {
+    const el = id => document.getElementById('proxy-' + id);
+    const cfg = {
+        enabled: el('enabled')?.checked || false,
+        type: el('type')?.value || 'http',
+        host: el('host')?.value || '',
+        port: parseInt(el('port')?.value || 8080),
+        username: el('username')?.value || '',
+        password: el('password')?.value || '',
+    };
+    try {
+        const resp = await fetch('/api/proxy', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cfg)
+        });
+        const data = await resp.json();
+        addLog(data.message || 'Proxy config updated');
+    } catch(e) {
+        addLog('Failed to save proxy config');
+    }
+}
+
+async function testProxy() {
+    const el = id => document.getElementById('proxy-' + id);
+    const cfg = {
+        type: el('type')?.value || 'http',
+        host: el('host')?.value || '',
+        port: parseInt(el('port')?.value || 8080),
+        username: el('username')?.value || '',
+        password: el('password')?.value || '',
+    };
+    const btn = document.getElementById('proxy-test-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Testing...'; }
+    try {
+        const resp = await fetch('/api/proxy/test', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(cfg)
+        });
+        const data = await resp.json();
+        addLog(data.message);
+    } catch(e) {
+        addLog('Proxy test failed');
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'Test'; }
+    }
+}
+
+
 // ─── FTP File List ──────────────────────────────────────────
 
 async function loadFtpFileList() {
@@ -1054,6 +1124,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProtocolCards();
     loadRouters();
     loadSourceIps();
+    loadProxy();
     loadFtpFileList();
     document.getElementById('source-ip-toggle').addEventListener('change', toggleSourceIpConfig);
     autoRefreshInterval = setInterval(() => { pollStatus(); pollRouterStatus(); }, 2000);

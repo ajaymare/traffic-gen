@@ -18,6 +18,16 @@ engine = TrafficEngine()
 
 SERVER_HOST = os.environ.get('SERVER_HOST', 'server')
 
+# Global proxy configuration
+_proxy_config = {
+    'enabled': False,
+    'type': 'http',        # 'http' or 'socks5'
+    'host': '',
+    'port': 8080,
+    'username': '',
+    'password': '',
+}
+
 
 def _get_json():
     """Safely get JSON from request, returning empty dict on None."""
@@ -49,6 +59,19 @@ def start_traffic():
     config = data.get('config', {})
     if not protocol:
         return jsonify({"error": "protocol required"}), 400
+
+    # Resolve proxy: per-protocol override vs global
+    proxy_mode = config.pop('proxy', 'Global')
+    if proxy_mode == 'Global':
+        use_proxy = _proxy_config.get('enabled', False)
+    elif proxy_mode == 'On':
+        use_proxy = True
+    else:
+        use_proxy = False
+
+    if use_proxy and _proxy_config.get('host'):
+        config['_proxy'] = dict(_proxy_config)
+
     ok, msg = engine.start_job(protocol, config)
     return jsonify({"ok": ok, "message": msg}), 200 if ok else 409
 
@@ -75,6 +98,50 @@ def sudo_auth():
 def clear_stats():
     engine.clear_stats()
     return jsonify({"ok": True, "message": "Stats cleared"})
+
+
+# ─── Proxy Configuration ─────────────────────────────────
+
+@app.route('/api/proxy', methods=['GET', 'POST'])
+def proxy_config():
+    if request.method == 'GET':
+        return jsonify(_proxy_config)
+    data = _get_json()
+    _proxy_config['enabled'] = bool(data.get('enabled', False))
+    _proxy_config['type'] = data.get('type', 'http')
+    _proxy_config['host'] = data.get('host', '')
+    _proxy_config['port'] = int(data.get('port', 8080))
+    _proxy_config['username'] = data.get('username', '')
+    _proxy_config['password'] = data.get('password', '')
+    return jsonify({"ok": True, "message": "Proxy config updated", "config": _proxy_config})
+
+
+@app.route('/api/proxy/test', methods=['POST'])
+def proxy_test():
+    """Test proxy connectivity by making a request through the configured proxy."""
+    import requests as req
+    data = _get_json()
+    ptype = data.get('type', _proxy_config.get('type', 'http'))
+    host = data.get('host', _proxy_config.get('host', ''))
+    port = int(data.get('port', _proxy_config.get('port', 8080)))
+    username = data.get('username', _proxy_config.get('username', ''))
+    password = data.get('password', _proxy_config.get('password', ''))
+
+    if not host:
+        return jsonify({"ok": False, "message": "Proxy host not configured"}), 400
+
+    auth = f"{username}:{password}@" if username else ""
+    if ptype == 'socks5':
+        proxy_url = f"socks5h://{auth}{host}:{port}"
+    else:
+        proxy_url = f"http://{auth}{host}:{port}"
+
+    try:
+        resp = req.get('https://www.google.com', proxies={'https': proxy_url, 'http': proxy_url},
+                       timeout=10, verify=False)
+        return jsonify({"ok": True, "message": f"Proxy working — {resp.status_code} from google.com"})
+    except Exception as e:
+        return jsonify({"ok": False, "message": f"Proxy test failed: {e}"}), 502
 
 
 # ─── Router Link Simulation ──────────────────────────────
