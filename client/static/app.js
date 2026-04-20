@@ -16,7 +16,7 @@ const PROTOCOLS = {
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
             { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -68,7 +68,7 @@ const PROTOCOLS = {
             { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -86,7 +86,7 @@ const PROTOCOLS = {
             { key: 'port', label: 'Port', type: 'number', default: 53 },
             { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -107,7 +107,7 @@ const PROTOCOLS = {
             { key: 'password', label: 'Password', type: 'password', default: '' },
             { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
             { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'duration', label: 'Duration (s)', type: 'number', default: 900 },
         ]
@@ -122,7 +122,7 @@ const PROTOCOLS = {
             { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
             { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -140,7 +140,7 @@ const PROTOCOLS = {
             { key: 'method', label: 'Method', type: 'select', options: ['GET', 'POST', 'HEAD'], default: 'GET' },
             { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
             { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
-            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+            { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
             { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
             { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
             { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -169,6 +169,12 @@ function toggleProtoDetails(proto) {
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
 
+function toggleCustomProxy(proto) {
+    const sel = document.getElementById('cfg-' + proto + '-proxy');
+    const custom = document.getElementById('cfg-' + proto + '-proxy-custom');
+    if (sel && custom) custom.style.display = sel.value === 'Custom' ? 'block' : 'none';
+}
+
 function toggleAdvanced(proto) {
     const el = document.getElementById('adv-' + proto);
     const toggle = document.getElementById('adv-toggle-' + proto);
@@ -195,7 +201,27 @@ function renderProtocolCards() {
             if (f.key === 'flows') continue;
             const isAdv = ADVANCED_KEYS.includes(f.key);
             let input;
-            if (f.type === 'select') {
+            if (f.key === 'proxy') {
+                const opts = f.options.map(o =>
+                    `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o}</option>`).join('');
+                input = `<select id="cfg-${proto}-${f.key}" onchange="toggleCustomProxy('${proto}')">${opts}</select>`;
+                const customFields = `<div id="cfg-${proto}-proxy-custom" style="display:none;margin-top:4px;padding:6px;background:var(--bg-sub);border:1px solid var(--border);border-radius:4px">` +
+                    `<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;font-size:11px">` +
+                    `<label style="color:var(--text-secondary)">Type</label>` +
+                    `<select id="cfg-${proto}-proxy_type" style="padding:2px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px"><option value="http">HTTP</option><option value="socks5">SOCKS5</option></select>` +
+                    `<label style="color:var(--text-secondary)">Host</label>` +
+                    `<input type="text" id="cfg-${proto}-proxy_host" placeholder="proxy.example.com" style="padding:2px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px">` +
+                    `<label style="color:var(--text-secondary)">Port</label>` +
+                    `<input type="number" id="cfg-${proto}-proxy_port" value="8080" style="padding:2px 6px;font-size:11px;width:80px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px">` +
+                    `<label style="color:var(--text-secondary)">User</label>` +
+                    `<input type="text" id="cfg-${proto}-proxy_user" placeholder="(optional)" style="padding:2px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px">` +
+                    `<label style="color:var(--text-secondary)">Pass</label>` +
+                    `<input type="password" id="cfg-${proto}-proxy_pass" placeholder="(optional)" style="padding:2px 6px;font-size:11px;background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:3px">` +
+                    `</div></div>`;
+                const row = `<div class="field-row"><label>${f.label}</label>${input}</div>${customFields}`;
+                advancedHtml += row; hasAdvanced = true;
+                continue;
+            } else if (f.type === 'select') {
                 const opts = f.options.map(o =>
                     `<option value="${o}" ${o === f.default ? 'selected' : ''}>${o}</option>`).join('');
                 input = `<select id="cfg-${proto}-${f.key}">${opts}</select>`;
@@ -267,6 +293,15 @@ function getConfig(proto) {
         if (f.type === 'checkbox') cfg[f.key] = el.checked;
         else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
         else cfg[f.key] = el.value;
+    }
+    // Custom proxy override: include custom proxy fields
+    if (cfg.proxy === 'Custom') {
+        const g = id => document.getElementById(`cfg-${proto}-${id}`);
+        cfg.proxy_type = g('proxy_type')?.value || 'http';
+        cfg.proxy_host = g('proxy_host')?.value || '';
+        cfg.proxy_port = parseInt(g('proxy_port')?.value || 8080);
+        cfg.proxy_user = g('proxy_user')?.value || '';
+        cfg.proxy_pass = g('proxy_pass')?.value || '';
     }
     return cfg;
 }

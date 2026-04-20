@@ -427,6 +427,11 @@ function toggleProtoDetails(clientName, proto) {
     var el = document.getElementById('c-' + clientName + '-details-' + proto);
     if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
+function toggleCustomProxy(clientName, proto) {
+    var sel = document.getElementById('c-' + clientName + '-' + proto + '-proxy');
+    var custom = document.getElementById('c-' + clientName + '-' + proto + '-proxy-custom');
+    if (sel && custom) custom.style.display = sel.value === 'Custom' ? 'block' : 'none';
+}
 function toggleAdvanced(clientName, proto) {
     var el = document.getElementById('c-' + clientName + '-adv-' + proto);
     var toggle = document.getElementById('c-' + clientName + '-adv-toggle-' + proto);
@@ -450,7 +455,7 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -490,7 +495,7 @@ const PROTOCOLS = {
         { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -504,7 +509,7 @@ const PROTOCOLS = {
         { key: 'port', label: 'Port', type: 'number', default: 53 },
         { key: 'domains', label: 'Domains (one per line)', type: 'textarea', default: 'google.com\\namazon.com\\nmicrosoft.com\\ngithub.com\\ncloudflare.com' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -520,7 +525,7 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'password', default: '' },
         { key: 'filename', label: 'Filename', type: 'select', options: ['testfile_100mb.bin'], default: 'testfile_100mb.bin' },
         { key: 'random_size', label: 'Random File', type: 'checkbox', default: false },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -536,7 +541,7 @@ const PROTOCOLS = {
         { key: 'password', label: 'Password', type: 'password', default: 'testpass' },
         { key: 'command', label: 'Command', type: 'text', default: 'uptime' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 5 },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -550,7 +555,7 @@ const PROTOCOLS = {
         { key: 'method', label: 'Method', type: 'select', options: ['GET','POST','HEAD'], default: 'GET' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
-        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off'], default: 'Global' },
+        { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
         { key: 'burst_enabled', label: 'Burst Mode', type: 'checkbox', default: false },
@@ -699,24 +704,47 @@ async function renderClientTab(name) {
         let hasAdvanced = false;
         for (const f of def.fields) {
             if (f.key === 'flows') continue;
-            const isAdv = ADVANCED_KEYS.includes(f.key);
-            let input;
-            const id = 'c-' + name + '-' + proto + '-' + f.key;
-            let defVal = f.default;
+            var isAdv = ADVANCED_KEYS.includes(f.key);
+            var input;
+            var id = 'c-' + name + '-' + proto + '-' + f.key;
+            var defVal = f.default;
             if (typeof defVal === 'string') defVal = defVal.replace(/server/g, serverHost);
-            if (f.type === 'select') {
-                const opts = f.options.map(o =>
-                    '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>').join('');
+            if (f.key === 'proxy') {
+                var opts = f.options.map(function(o) {
+                    return '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>';
+                }).join('');
+                input = '<select id="' + id + '" onchange="toggleCustomProxy(\'' + name + '\',\'' + proto + '\')">' + opts + '</select>';
+                var pfx = 'c-' + name + '-' + proto + '-';
+                var customFields = '<div id="' + pfx + 'proxy-custom" style="display:none;margin-top:4px;padding:6px;background:var(--bg-sub);border:1px solid var(--border);border-radius:4px">' +
+                    '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;align-items:center;font-size:11px">' +
+                    '<label style="color:var(--text-secondary)">Type</label>' +
+                    '<select id="' + pfx + 'proxy_type" style="padding:2px 6px;font-size:11px;' + inputStyle + '"><option value="http">HTTP</option><option value="socks5">SOCKS5</option></select>' +
+                    '<label style="color:var(--text-secondary)">Host</label>' +
+                    '<input type="text" id="' + pfx + 'proxy_host" placeholder="proxy.example.com" style="padding:2px 6px;font-size:11px;' + inputStyle + '">' +
+                    '<label style="color:var(--text-secondary)">Port</label>' +
+                    '<input type="number" id="' + pfx + 'proxy_port" value="8080" style="padding:2px 6px;font-size:11px;width:80px;' + inputStyle + '">' +
+                    '<label style="color:var(--text-secondary)">User</label>' +
+                    '<input type="text" id="' + pfx + 'proxy_user" placeholder="(optional)" style="padding:2px 6px;font-size:11px;' + inputStyle + '">' +
+                    '<label style="color:var(--text-secondary)">Pass</label>' +
+                    '<input type="password" id="' + pfx + 'proxy_pass" placeholder="(optional)" style="padding:2px 6px;font-size:11px;' + inputStyle + '">' +
+                    '</div></div>';
+                var row = '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>' + customFields;
+                advancedHtml += row; hasAdvanced = true;
+                continue;
+            } else if (f.type === 'select') {
+                var opts = f.options.map(function(o) {
+                    return '<option value="' + o + '"' + (o === f.default ? ' selected' : '') + '>' + o + '</option>';
+                }).join('');
                 input = '<select id="' + id + '">' + opts + '</select>';
             } else if (f.type === 'textarea') {
                 input = '<textarea id="' + id + '" rows="3" style="width:100%;' + inputStyle + ';resize:vertical;font-family:inherit">' + defVal + '</textarea>';
             } else if (f.type === 'checkbox') {
                 input = '<input type="checkbox" id="' + id + '"' + (f.default ? ' checked' : '') + '>';
             } else {
-                const step = f.step ? ' step="' + f.step + '"' : '';
+                var step = f.step ? ' step="' + f.step + '"' : '';
                 input = '<input type="' + f.type + '" id="' + id + '" value="' + defVal + '"' + step + '>';
             }
-            const row = '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
+            var row = '<div class="field-row"><label>' + f.label + '</label>' + input + '</div>';
             if (isAdv) { advancedHtml += row; hasAdvanced = true; }
             else basicHtml += row;
         }
@@ -765,8 +793,8 @@ async function renderClientTab(name) {
         '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-topo\')"><span>Traffic Topology</span>' +
         '<div style="display:flex;align-items:center;gap:6px" onclick="event.stopPropagation()">' +
         '<button class="btn btn-secondary" onclick="clientRefreshTopology(\'' + name + '\')" style="padding:3px 10px;font-size:10px">Refresh</button>' +
-        '<span class="chevron" id="chevron-c-' + name + '-topo">&#9654;</span></div>' +
-        '</div><div class="card-body" id="section-c-' + name + '-topo" style="display:none">' +
+        '<span class="chevron collapsed" id="chevron-c-' + name + '-topo">&#9660;</span></div>' +
+        '</div><div class="card-body collapsed" id="section-c-' + name + '-topo">' +
         '<div id="c-' + name + '-topo-container" style="width:100%;height:350px;border:1px solid var(--border);border-radius:6px;background:var(--bg-sub)"></div>' +
         '</div></div>' +
         // Router Link Simulation
@@ -800,8 +828,8 @@ async function renderClientTab(name) {
         '</div><div id="c-' + name + '-source-ip-list" style="margin-top:6px;font-size:10px;color:var(--text-secondary)"></div></div>' +
         '</div></div></div>' +
         // Proxy Configuration
-        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-proxy\')"><span>Proxy Configuration</span><span class="chevron" id="chevron-c-' + name + '-proxy">&#9654;</span></div>' +
-        '<div class="card-body" id="section-c-' + name + '-proxy" style="display:none">' +
+        '<div class="card"><div class="card-header" onclick="toggleSection(\'c-' + name + '-proxy\')"><span>Proxy Configuration</span><span class="chevron collapsed" id="chevron-c-' + name + '-proxy">&#9660;</span></div>' +
+        '<div class="card-body collapsed" id="section-c-' + name + '-proxy">' +
         '<div style="padding:8px;background:var(--bg-sub);border:1px solid var(--border);border-radius:6px">' +
         '<label style="display:flex;align-items:center;gap:8px;margin-bottom:8px">' +
         '<input type="checkbox" id="c-' + name + '-proxy-enabled">' +
@@ -850,14 +878,24 @@ async function renderClientTab(name) {
 
 // ─── Client Actions ──────────────────────────────────────────
 function clientGetConfig(clientName, proto) {
-    const cfg = {};
-    for (const f of PROTOCOLS[proto].fields) {
+    var cfg = {};
+    for (var i = 0; i < PROTOCOLS[proto].fields.length; i++) {
+        var f = PROTOCOLS[proto].fields[i];
         if (f.key === 'flows') continue;
-        const el = document.getElementById('c-' + clientName + '-' + proto + '-' + f.key);
+        var el = document.getElementById('c-' + clientName + '-' + proto + '-' + f.key);
         if (!el) continue;
         if (f.type === 'checkbox') cfg[f.key] = el.checked;
         else if (f.type === 'number') cfg[f.key] = parseFloat(el.value);
         else cfg[f.key] = el.value;
+    }
+    if (cfg.proxy === 'Custom') {
+        var pfx = 'c-' + clientName + '-' + proto + '-';
+        var g = function(id) { return document.getElementById(pfx + id); };
+        cfg.proxy_type = g('proxy_type') ? g('proxy_type').value : 'http';
+        cfg.proxy_host = g('proxy_host') ? g('proxy_host').value : '';
+        cfg.proxy_port = g('proxy_port') ? parseInt(g('proxy_port').value) : 8080;
+        cfg.proxy_user = g('proxy_user') ? g('proxy_user').value : '';
+        cfg.proxy_pass = g('proxy_pass') ? g('proxy_pass').value : '';
     }
     return cfg;
 }

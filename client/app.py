@@ -62,15 +62,30 @@ def start_traffic():
 
     # Resolve proxy: per-protocol override vs global
     proxy_mode = config.pop('proxy', 'Global')
-    if proxy_mode == 'Global':
+    if proxy_mode == 'Custom':
+        # Per-protocol custom proxy
+        custom_host = config.pop('proxy_host', '')
+        if custom_host:
+            config['_proxy'] = {
+                'enabled': True,
+                'type': config.pop('proxy_type', 'http'),
+                'host': custom_host,
+                'port': int(config.pop('proxy_port', 8080)),
+                'username': config.pop('proxy_user', ''),
+                'password': config.pop('proxy_pass', ''),
+            }
+        else:
+            # Custom selected but no host — remove stale keys
+            for k in ('proxy_type', 'proxy_port', 'proxy_user', 'proxy_pass'):
+                config.pop(k, None)
+    elif proxy_mode == 'Global':
         use_proxy = _proxy_config.get('enabled', False)
+        if use_proxy and _proxy_config.get('host'):
+            config['_proxy'] = dict(_proxy_config)
     elif proxy_mode == 'On':
-        use_proxy = True
-    else:
-        use_proxy = False
-
-    if use_proxy and _proxy_config.get('host'):
-        config['_proxy'] = dict(_proxy_config)
+        if _proxy_config.get('host'):
+            config['_proxy'] = dict(_proxy_config)
+    # 'Off' — no proxy
 
     ok, msg = engine.start_job(protocol, config)
     return jsonify({"ok": ok, "message": msg}), 200 if ok else 409
