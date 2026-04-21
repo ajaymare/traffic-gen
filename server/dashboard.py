@@ -1328,8 +1328,8 @@ function clientRenderTopology(clientName, data) {
     var routerByIp = {};
     routers.forEach(function(r) { routerByIp[r.ip] = r; });
 
-    var pathKeys = Object.keys(pathsObj);
-    var runningPaths = pathKeys.filter(function(k) { return k !== 'default' && pathsObj[k].running; });
+    var pathKeys = Object.keys(pathsObj).filter(function(k) { return k !== 'default'; });
+    var runningPaths = pathKeys.filter(function(k) { return pathsObj[k].running; });
     var hasTraffic = runningPaths.length > 0;
     clientTopoHasTraffic[clientName] = hasTraffic;
 
@@ -1453,9 +1453,13 @@ function clientRenderTopology(clientName, data) {
     });
 
     if (pathKeys.length === 0) {
-        edges.add({ id: 'e_direct', from: 'client', to: 'server',
-            arrows: { to: { enabled: true, scaleFactor: 0.5, type: 'arrow' } },
-            color: { color: '#cbd5e1' }, width: 1.5, dashes: [5, 5] });
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:13px;padding:40px 0;">No active traffic flows \u2014 start a protocol to see topology</div>';
+        if (clientTopoNetworks[clientName]) { clientTopoNetworks[clientName].destroy(); clientTopoNetworks[clientName] = null; }
+        var _legendEl = document.getElementById('c-' + clientName + '-topo-legend');
+        if (_legendEl) _legendEl.innerHTML = '';
+        var _statsEl = document.getElementById('c-' + clientName + '-topo-stats');
+        if (_statsEl) _statsEl.innerHTML = '<span style="color:var(--text-secondary)">\u25CB No active traffic flows</span>';
+        return;
     }
 
     var options = {

@@ -19,13 +19,17 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+ENV HOME=/home/appuser
+ENV XDG_CACHE_HOME=/home/appuser/.cache
 RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install --with-deps chromium firefox webkit
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY . .
 
-# Give appuser ownership of the app directory
-RUN chown -R appuser:appuser /app
+# Give appuser ownership of the app directory and browser cache dirs
+RUN chown -R appuser:appuser /app && \
+    mkdir -p /home/appuser/.cache/dconf /home/appuser/.cache/fontconfig && \
+    chown -R appuser:appuser /home/appuser/.cache
 
 EXPOSE 8080 8443
 

@@ -866,7 +866,12 @@ class TrafficEngine:
                 # Pick browser — rotate on each cycle when Random
                 b_name, b_type = random.choice(browser_list)
                 try:
-                    browser = b_type.launch(headless=True)
+                    launch_args = {'headless': True}
+                    if b_name == 'Chromium':
+                        launch_args['args'] = ['--no-sandbox', '--disable-setuid-sandbox']
+                    elif b_name == 'Firefox':
+                        launch_args['firefox_user_prefs'] = {'security.sandbox.content.level': 0}
+                    browser = b_type.launch(**launch_args)
                 except Exception as e:
                     job.stats['errors'] += 1
                     job.log(f"Failed to launch {b_name}: {e}")

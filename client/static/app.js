@@ -964,8 +964,9 @@ function renderTopology(data) {
     const routerByIp = {};
     routers.forEach(r => { routerByIp[r.ip] = r; });
 
-    const pathKeys = Object.keys(pathsObj);
-    const runningPaths = pathKeys.filter(k => k !== 'default' && pathsObj[k].running);
+    // Only show active (non-default) paths
+    const pathKeys = Object.keys(pathsObj).filter(k => k !== 'default');
+    const runningPaths = pathKeys.filter(k => pathsObj[k].running);
     topoHasTraffic = runningPaths.length > 0;
 
     // Group paths by hop signature for merging
@@ -1114,12 +1115,16 @@ function renderTopology(data) {
         }
     });
 
+    // If no active flows, show empty state
     if (pathKeys.length === 0) {
-        edges.add({
-            id: 'e_direct', from: 'client', to: 'server',
-            arrows: { to: { enabled: true, scaleFactor: 0.5, type: 'arrow' } },
-            color: { color: '#cbd5e1' }, width: 1.5, dashes: [5, 5],
-        });
+        container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-secondary);font-size:13px;padding:40px 0;">No active traffic flows — start a protocol to see topology</div>';
+        if (topoNetwork) { topoNetwork.destroy(); topoNetwork = null; }
+        // Clear legend and stats
+        const legendEl = document.getElementById('topology-legend');
+        if (legendEl) legendEl.innerHTML = '';
+        const statsEl = document.getElementById('topology-stats');
+        if (statsEl) statsEl.innerHTML = '<span style="color:var(--text-secondary)">\u25CB No active traffic flows</span>';
+        return;
     }
 
     const options = {
