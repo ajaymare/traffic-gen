@@ -240,7 +240,7 @@ PROTO_TRACEROUTE = {
     'dns':        {'args': ['-U', '-p', '53'],   'label': 'DNS',         'port': 53,   'host_key': 'host'},
     'ftp':        {'args': ['-T', '-p', '21'],   'label': 'FTP',         'port': 21,   'host_key': 'host'},
     'ssh':        {'args': ['-T', '-p', '2222'], 'label': 'SSH',         'port': 2222, 'host_key': 'host'},
-    'hping3':     {'args': [],                   'label': 'hping3',      'port': 0,    'host_key': 'host'},
+    'hping3':     {'args': ['-I'],                'label': 'hping3',      'port': 0,    'host_key': 'host'},
     'ext_https':  {'args': ['-T', '-p', '443'],  'label': 'Ext HTTPS',   'port': 443,  'host_key': 'urls'},
 }
 
@@ -264,7 +264,18 @@ def _run_traceroute(dest, extra_args=None):
                 ip = parts[1] if parts[1] != '*' else '*'
                 rtt = parts[2] if len(parts) >= 3 and parts[1] != '*' else '--'
                 hops.append({'hop': int(parts[0]), 'ip': ip, 'rtt': rtt})
-        return hops
+        # Remove trailing timeout hops (keep at most 1 consecutive timeout)
+        filtered = []
+        consecutive_timeouts = 0
+        for h in hops:
+            if h['ip'] == '*':
+                consecutive_timeouts += 1
+                if consecutive_timeouts <= 1:
+                    filtered.append(h)
+            else:
+                consecutive_timeouts = 0
+                filtered.append(h)
+        return filtered
     except Exception:
         return []
 
@@ -334,24 +345,7 @@ def topology():
     now = time.time()
     paths = {}
 
-    # Always include default ICMP path
-    cache_key = 'default:' + SERVER_HOST
-    cached = _topo_path_cache.get(cache_key)
-    if not cached or now - cached['time'] > _TOPO_CACHE_TTL:
-        hops = _run_traceroute(SERVER_HOST)
-        _topo_path_cache[cache_key] = {'hops': hops, 'time': now}
-    else:
-        hops = cached['hops']
-    paths['default'] = {
-        'label': 'Default (ICMP)',
-        'dest': SERVER_HOST,
-        'port': 0,
-        'hops': hops,
-        'running': False,
-        'stats': {},
-    }
-
-    # Per-protocol traceroute for running protocols
+    # Per-protocol traceroute for running protocols only (no default path)
     def trace_proto(proto_key, agg):
         tc = PROTO_TRACEROUTE.get(proto_key)
         if not tc:
