@@ -51,18 +51,20 @@ def _set_tos(sock, tos):
 
 
 class DscpHTTPAdapter(HTTPAdapter):
-    """HTTPAdapter that sets IP_TOS/DSCP on the underlying socket."""
+    """HTTPAdapter that sets IP_TOS/DSCP and source IP binding on the underlying socket."""
 
-    def __init__(self, tos=0, **kwargs):
+    def __init__(self, tos=0, source_address=None, **kwargs):
         self.tos = tos
+        self.source_address = source_address  # (ip, 0) tuple to bind to
         super().__init__(**kwargs)
 
     def init_poolmanager(self, *args, **kwargs):
+        socket_options = [(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)]
         if self.tos > 0:
-            kwargs['socket_options'] = [
-                (socket.IPPROTO_IP, socket.IP_TOS, self.tos),
-                (socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1),
-            ]
+            socket_options.append((socket.IPPROTO_IP, socket.IP_TOS, self.tos))
+        kwargs['socket_options'] = socket_options
+        if self.source_address:
+            kwargs['source_address'] = self.source_address
         super().init_poolmanager(*args, **kwargs)
 
 
@@ -84,6 +86,13 @@ _USER_AGENTS = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
 ]
+
+
+def _get_source_address():
+    """Return a (ip, 0) tuple for socket binding if aliases are configured, else None."""
+    import network_shaper
+    ip = network_shaper.get_random_source_ip()
+    return (ip, 0) if ip else None
 
 
 def _browser_headers(url=''):
@@ -306,19 +315,33 @@ class TrafficEngine:
             sock_opts = []
             if tos > 0:
                 sock_opts = [(socket.IPPROTO_IP, socket.IP_TOS, tos)]
-            transport_kwargs = {}
-            if sock_opts:
-                transport_kwargs['socket_options'] = sock_opts
-            if proxy_url:
-                transport_kwargs['proxy'] = proxy_url
-            transport = httpx.HTTPTransport(**transport_kwargs) if transport_kwargs else None
-            client = httpx.Client(http2=True, verify=verify_ssl, timeout=60,
-                                  transport=transport, proxy=proxy_url if (proxy_url and not transport_kwargs.get('proxy')) else None)
+            _cur_src_h2 = None
+
+            def _make_h2_client(src_ip=None):
+                t_kwargs = {}
+                if sock_opts:
+                    t_kwargs['socket_options'] = sock_opts
+                if proxy_url:
+                    t_kwargs['proxy'] = proxy_url
+                if src_ip:
+                    t_kwargs['local_address'] = src_ip
+                transport = httpx.HTTPTransport(**t_kwargs) if t_kwargs else None
+                return httpx.Client(http2=True, verify=verify_ssl, timeout=60,
+                                    transport=transport, proxy=proxy_url if (proxy_url and not t_kwargs.get('proxy')) else None)
+
+            src_addr = _get_source_address()
+            client = _make_h2_client(src_addr[0] if src_addr else None)
             try:
                 while not job.should_stop():
                     for _ in range(burst_count):
                         if job.should_stop():
                             break
+                        # Rotate source IP each request
+                        new_src = _get_source_address()
+                        if new_src != _cur_src_h2:
+                            _cur_src_h2 = new_src
+                            client.close()
+                            client = _make_h2_client(new_src[0] if new_src else None)
                         sent_bytes = 0
                         recv_bytes = 0
                         req_url = url
@@ -362,17 +385,29 @@ class TrafficEngine:
             finally:
                 client.close()
         else:
-            session = requests.Session()
-            if tos > 0:
-                adapter = DscpHTTPAdapter(tos=tos)
-                session.mount('https://', adapter)
-            if proxy_url:
-                session.proxies = {'https': proxy_url, 'http': proxy_url}
+            _cur_src = None  # track current source IP for rotation
+
+            def _make_session(src_addr=None):
+                s = requests.Session()
+                adapter = DscpHTTPAdapter(tos=tos, source_address=src_addr)
+                s.mount('https://', adapter)
+                s.mount('http://', adapter)
+                if proxy_url:
+                    s.proxies = {'https': proxy_url, 'http': proxy_url}
+                return s
+
+            session = _make_session(_get_source_address())
 
             while not job.should_stop():
                 for _ in range(burst_count):
                     if job.should_stop():
                         break
+                    # Rotate source IP each request
+                    new_src = _get_source_address()
+                    if new_src != _cur_src:
+                        _cur_src = new_src
+                        session.close()
+                        session = _make_session(new_src)
                     sent_bytes = 0
                     recv_bytes = 0
                     req_url = url
@@ -440,16 +475,28 @@ class TrafficEngine:
         proxy_str = f" proxy={proxy_url}" if proxy_url else ""
         job.log(f"HTTP {method} {base_url} data_size={data_size_kb}KB interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
 
-        session = requests.Session()
-        adapter = DscpHTTPAdapter(tos=tos, max_retries=3)
-        session.mount('http://', adapter)
-        if proxy_url:
-            session.proxies = {'http': proxy_url, 'https': proxy_url}
+        _cur_src = None
+
+        def _make_session(src_addr=None):
+            s = requests.Session()
+            adapter = DscpHTTPAdapter(tos=tos, source_address=src_addr, max_retries=3)
+            s.mount('http://', adapter)
+            s.mount('https://', adapter)
+            if proxy_url:
+                s.proxies = {'http': proxy_url, 'https': proxy_url}
+            return s
+
+        session = _make_session(_get_source_address())
 
         while not job.should_stop():
             for _ in range(burst_count):
                 if job.should_stop():
                     break
+                new_src = _get_source_address()
+                if new_src != _cur_src:
+                    _cur_src = new_src
+                    session.close()
+                    session = _make_session(new_src)
                 sent_bytes = 0
                 recv_bytes = 0
                 try:
@@ -829,23 +876,30 @@ class TrafficEngine:
         for i, u in enumerate(urls):
             job.log(f"  URL[{i}]: {u}")
 
-        session = requests.Session()
-        if tos > 0:
-            adapter = DscpHTTPAdapter(tos=tos)
-            session.mount('http://', adapter)
-            session.mount('https://', adapter)
-        if proxy_url:
-            session.proxies = {'https': proxy_url, 'http': proxy_url}
-        session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        })
+        _cur_src = None
+
+        def _make_session(src_addr=None):
+            s = requests.Session()
+            adapter = DscpHTTPAdapter(tos=tos, source_address=src_addr)
+            s.mount('http://', adapter)
+            s.mount('https://', adapter)
+            if proxy_url:
+                s.proxies = {'https': proxy_url, 'http': proxy_url}
+            return s
+
+        session = _make_session(_get_source_address())
 
         url_index = 0
         while not job.should_stop():
             for _ in range(burst_count):
                 if job.should_stop():
                     break
+                # Rotate source IP each request
+                new_src = _get_source_address()
+                if new_src != _cur_src:
+                    _cur_src = new_src
+                    session.close()
+                    session = _make_session(new_src)
                 url = urls[url_index % len(urls)]
                 url_index += 1
                 try:
