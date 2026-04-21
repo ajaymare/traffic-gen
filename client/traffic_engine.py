@@ -968,7 +968,8 @@ class TrafficEngine:
         tos = _dscp_to_tos(dscp)
 
         # hping3 requires raw sockets — run via sudo (NOPASSWD configured)
-        cmd = ['sudo', 'hping3', host, '--ttl', str(ttl), '-d', str(packet_size)]
+        # -n: skip reverse DNS lookups (avoids "name=UNKNOWN" delays)
+        cmd = ['sudo', 'hping3', host, '-n', '--ttl', str(ttl), '-d', str(packet_size)]
 
         # Mode flags
         mode_map = {
