@@ -123,8 +123,16 @@ def check_reset():
             ftp_stats[k] = 0
         for k in ssh_stats:
             ssh_stats[k] = 0
-        ftp_pos = 0
-        auth_pos = 0
+        # Seek to end of log files so old entries aren't recounted
+        try:
+            ftp_pos = os.path.getsize(FTP_LOG) if os.path.exists(FTP_LOG) else 0
+        except OSError:
+            ftp_pos = 0
+        try:
+            auth_pos = os.path.getsize(AUTH_LOG) if os.path.exists(AUTH_LOG) else 0
+        except OSError:
+            auth_pos = 0
+        save_stats()
         try:
             os.remove(RESET_SIGNAL)
         except OSError:
