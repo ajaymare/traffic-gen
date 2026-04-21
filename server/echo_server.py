@@ -172,9 +172,9 @@ def _parse_dns_name(data, offset):
     return '.'.join(labels), offset
 
 
-def _build_dns_response(query, domain, ip):
+def _build_dns_response(query, _domain, ip):
     """Build a DNS A-record response for the given query."""
-    # Copy transaction ID and set response flags
+    # Copy transaction ID from original query
     txn_id = query[:2]
     flags = struct.pack('!H', 0x8180)  # response, authoritative, recursion available
     qdcount = struct.pack('!H', 1)
@@ -183,14 +183,16 @@ def _build_dns_response(query, domain, ip):
     arcount = struct.pack('!H', 0)
     header = txn_id + flags + qdcount + ancount + nscount + arcount
 
-    # Rebuild question section
-    qname = b''
-    for label in domain.split('.'):
-        qname += bytes([len(label)]) + label.encode('ascii')
-    qname += b'\x00'
-    question = qname + struct.pack('!HH', 1, 1)  # QTYPE=A, QCLASS=IN
+    # Copy the question section directly from the original query (byte 12 onward)
+    # Find end of QNAME (null terminator) then skip QTYPE(2) + QCLASS(2)
+    offset = 12
+    while offset < len(query) and query[offset] != 0:
+        offset += 1 + query[offset]
+    offset += 1  # skip null terminator
+    offset += 4  # skip QTYPE + QCLASS
+    question = query[12:offset]
 
-    # Answer section — pointer to qname + A record
+    # Answer section — pointer to qname at offset 12 + A record
     answer = struct.pack('!HHHLH', 0xC00C, 1, 1, 300, 4)  # name pointer, A, IN, TTL=300, RDLENGTH=4
     answer += socket.inet_aton(ip)
 
@@ -231,7 +233,8 @@ def dns_server(port=9998):
                 stats['dns']['bytes_sent'] += len(response)
                 stats['dns']['forwarded'] += 1
 
-        except Exception:
+        except Exception as e:
+            print(f"[DNS] Error: {e}")
             with stats_lock:
                 stats['dns']['errors'] += 1
 
