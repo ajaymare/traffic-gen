@@ -19,7 +19,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
-RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install --with-deps chromium firefox
+RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install --with-deps chromium firefox webkit
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY . .
