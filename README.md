@@ -66,7 +66,8 @@ docker compose up -d
 ### Browser Mode (Playwright)
 - **Real browser traffic**: Toggle Browser Mode on HTTPS, HTTP Plain, or External HTTPS to use Playwright headless browsers instead of Python HTTP clients
 - **Authentic fingerprints**: Generates real TLS fingerprints, User-Agent strings, and L7 headers (Sec-CH-UA, Sec-Fetch-*, Accept-Language) indistinguishable from real browsers
-- **Browser rotation**: Choose Chromium, Firefox, WebKit, or Random (rotates each burst cycle)
+- **3 browser engines**: Chromium (Chrome/Edge/Brave), Firefox (Gecko), WebKit (Safari) — all installed in the container
+- **Browser rotation**: Choose a specific browser or Random to rotate between all 3 engines each burst cycle
 - **Full page loads**: Loads JS, CSS, images, fonts — triggers all sub-requests a real browser would make
 - **Proxy support**: Works with global, per-protocol, and custom proxy configurations
 
