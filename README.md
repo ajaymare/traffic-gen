@@ -6,14 +6,14 @@ Docker-based network traffic generation and testing tool with a blue/corporate-t
 
 | Protocol | Description |
 |----------|-------------|
-| HTTPS | GET/POST with optional HTTP/2, SSL bypass, upload mode |
+| HTTPS | GET/POST with optional HTTP/2, SSL bypass, upload mode, browser mode |
 | iperf3 | TCP/UDP bandwidth testing with parallel streams, reverse mode |
 | hping3 | ICMP, TCP SYN/ACK/FIN, UDP, Traceroute with flood mode |
-| HTTP (Plain) | Plain HTTP on port 9999 with configurable data sizes |
+| HTTP (Plain) | Plain HTTP on port 9999 with configurable data sizes, browser mode |
 | DNS | DNS queries to configurable domains via local DNS server |
 | FTP | Continuous file download with progress logging |
 | SSH | Repeated command execution over SSH |
-| External HTTPS | Multi-URL round-robin to external sites |
+| External HTTPS | Multi-URL round-robin to external sites, browser mode |
 
 ## Architecture
 
@@ -63,6 +63,18 @@ docker compose up -d
 - **Select all / bulk actions**: Start or stop multiple protocols at once
 - **Collapsible protocol cards**: Click to expand, advanced fields (DSCP, burst, rate) hidden behind toggle
 
+### Browser Mode (Playwright)
+- **Real browser traffic**: Toggle Browser Mode on HTTPS, HTTP Plain, or External HTTPS to use Playwright headless browsers instead of Python HTTP clients
+- **Authentic fingerprints**: Generates real TLS fingerprints, User-Agent strings, and L7 headers (Sec-CH-UA, Sec-Fetch-*, Accept-Language) indistinguishable from real browsers
+- **Browser rotation**: Choose Chromium, Firefox, WebKit, or Random (rotates each burst cycle)
+- **Full page loads**: Loads JS, CSS, images, fonts — triggers all sub-requests a real browser would make
+- **Proxy support**: Works with global, per-protocol, and custom proxy configurations
+
+### Proxy Configuration
+- **Global proxy**: Configure HTTP or SOCKS5 proxy with optional authentication for all protocols
+- **Per-protocol override**: Each protocol can use Global proxy, force On/Off, or specify a Custom proxy
+- **Custom proxy**: Per-protocol custom proxy with independent type, host, port, and credentials
+
 ### Router-Based Link Simulation
 - **SSH-based**: Connect to Linux routers via SSH, apply tc/netem impairment on real interfaces
 - **Multiple routers**: Add and manage multiple routers independently
@@ -78,8 +90,11 @@ docker compose up -d
 ### Traffic Topology
 - **Per-protocol traceroute**: Each protocol runs its own TCP/UDP traceroute (e.g., TCP port 443 for HTTPS, UDP port 53 for DNS) to reveal SD-WAN policy routing differences
 - **Multi-path visualization**: vis.js network graph shows all discovered paths with color-coded edges per protocol
+- **Enterprise-grade icons**: SVG icons for client (laptop), server (rack), router, and hop nodes
 - **Path merging**: Paths with identical hops automatically merge to reduce clutter, with protocol labels combined
-- **Live animation**: Animated edges for active traffic flows with real-time status indicators
+- **Live animation**: 4-phase pulse animation on active traffic flow edges
+- **Rich tooltips**: Hover nodes for detailed info with modern card-style tooltips
+- **Stats bar**: Real-time topology stats showing active protocols, bytes, and request counts
 - **30-second cache**: Traceroute results cached per protocol to avoid excessive probing
 
 ### Monitoring
@@ -92,7 +107,7 @@ docker compose up -d
 - **Docker healthchecks**: Both containers report health status via `docker ps`
 
 ### Protocol-Specific
-- **HTTPS with HTTP/2**: Toggle HTTP/2 for true HTTP/2 traffic using httpx with h2
+- **HTTPS with HTTP/2**: Toggle HTTP/2 for true HTTP/2 traffic using httpx with h2 (App-ID: web-browsing)
 - **iperf3**: TCP/UDP with configurable bandwidth, parallel streams, reverse mode; 3 server instances (ports 5201-5203)
 - **hping3**: ICMP ping, TCP SYN/ACK/FIN scans, UDP probes, traceroute with flood mode, custom TTL and DSCP
 - **DNS**: Queries configurable domain list via built-in DNS server on port 53
