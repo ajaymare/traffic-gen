@@ -534,35 +534,19 @@ class TrafficEngine:
     # ─── DNS (port 9998) ────────────────────────────────────
 
     def _run_dns(self, job: TrafficJob):
-        """Send DNS A-record queries to the DNS forwarder on port 9998 (App-ID: dns)."""
+        """Send DNS queries using dig (App-ID: dns)."""
         cfg = job.config
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 53))
         domains_raw = cfg.get('domains', 'google.com\namazon.com\nmicrosoft.com\ngithub.com\ncloudflare.com')
-        # Handle literal \n from textarea, commas, and real newlines
         domains_raw = domains_raw.replace('\\n', '\n').replace(',', '\n')
         domains = [d.strip() for d in domains_raw.split('\n') if d.strip()]
         if not domains:
             domains = ['google.com']
         interval, burst_count, burst_pause = self._get_timing(cfg)
         dscp = cfg.get('dscp', 'BE')
-        tos = _dscp_to_tos(dscp)
-
-        socks_params = self._get_proxy_socks_params(cfg)
-        proxy_url = self._get_proxy_url(cfg)
         burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
-        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
-        job.log(f"DNS queries → {host}:{port} domains={len(domains)} interval={interval:.3f}s{burst_str} DSCP={dscp}(TOS={tos}){proxy_str}")
-
-        if socks_params:
-            sock = socks.socksocket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.set_proxy(*socks_params)
-        else:
-            if proxy_url and 'socks' not in (proxy_url or ''):
-                job.log("Note: HTTP proxy not supported for DNS — sending direct")
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5)
-        _set_tos(sock, tos)
+        job.log(f"DNS (dig) → @{host}:{port} domains={len(domains)} interval={interval:.3f}s{burst_str} DSCP={dscp}")
 
         domain_idx = 0
         while not job.should_stop():
@@ -572,19 +556,25 @@ class TrafficEngine:
                 domain = domains[domain_idx % len(domains)]
                 domain_idx += 1
                 try:
-                    # Build DNS A-record query packet
-                    query = self._build_dns_query(domain)
-                    sock.sendto(query, (host, port))
-                    job.stats['bytes_sent'] += len(query)
-                    resp, _ = sock.recvfrom(4096)
-                    job.stats['bytes_recv'] += len(resp)
+                    cmd = ['dig', f'@{host}', '-p', str(port), domain, 'A', '+short', '+timeout=3', '+tries=1']
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+                    output = result.stdout.strip()
                     job.stats['requests'] += 1
-                    # Parse response for answer count
-                    ans_count = struct.unpack('!H', resp[6:8])[0] if len(resp) >= 8 else 0
-                    job.log(f"DNS {domain} → {host}:{port} | sent={len(query)}B recv={len(resp)}B answers={ans_count}")
-                except socket.timeout:
+                    # Estimate bytes (dig query ~40-60 bytes, response varies)
+                    query_size = 40 + len(domain)
+                    resp_size = len(result.stdout) + len(result.stderr)
+                    job.stats['bytes_sent'] += query_size
+                    job.stats['bytes_recv'] += resp_size
+                    if result.returncode == 0 and output:
+                        answers = output.split('\n')
+                        job.log(f"DNS {domain} → @{host}:{port} | answers={len(answers)} [{', '.join(answers[:3])}]")
+                    else:
+                        job.stats['errors'] += 1
+                        err = result.stderr.strip().split('\n')[0] if result.stderr.strip() else 'no answer'
+                        job.log(f"DNS {domain} → @{host}:{port} | {err}")
+                except subprocess.TimeoutExpired:
                     job.stats['errors'] += 1
-                    job.log(f"DNS {domain} → {host}:{port} | timeout")
+                    job.log(f"DNS {domain} → @{host}:{port} | timeout")
                 except Exception as e:
                     job.stats['errors'] += 1
                     job.log(f"DNS error: {domain} — {e}")
@@ -594,24 +584,7 @@ class TrafficEngine:
                 job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
                 time.sleep(burst_pause)
 
-        sock.close()
         job.log("Stopped")
-
-    @staticmethod
-    def _build_dns_query(domain):
-        """Build a minimal DNS A-record query packet."""
-        import struct as st
-        txn_id = random.randint(0, 0xFFFF)
-        flags = 0x0100  # standard query, recursion desired
-        header = st.pack('!HHHHHH', txn_id, flags, 1, 0, 0, 0)
-        # Encode QNAME
-        qname = b''
-        for label in domain.split('.'):
-            qname += bytes([len(label)]) + label.encode('ascii')
-        qname += b'\x00'
-        # QTYPE=A (1), QCLASS=IN (1)
-        question = qname + st.pack('!HH', 1, 1)
-        return header + question
 
     # ─── iperf3 ───────────────────────────────────────────
 
