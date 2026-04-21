@@ -66,6 +66,5 @@ Uses vis.js Network library (CDN) for live topology visualization. Backend runs 
 ## Git Conventions
 
 - Contributor: Ajay Mare
-- Co-author: `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 - Docker images: `ajaymare/traffic-server:latest`, `ajaymare/traffic-client:latest` (amd64 only)
 - Remote: `https://github.com/ajaymare/traffic-gen.git`

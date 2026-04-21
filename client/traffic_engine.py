@@ -241,6 +241,12 @@ class TrafficEngine:
 
     def _run_https(self, job: TrafficJob):
         cfg = job.config
+        if cfg.get('browser_mode'):
+            url = cfg.get('url', 'https://server/')
+            if not url.startswith('https'):
+                url = url.replace('http://', 'https://')
+            return self._run_browser_mode(job, [url], ignore_ssl=cfg.get('ignore_ssl', False))
+
         url = cfg.get('url', 'https://server/')
         if not url.startswith('https'):
             url = url.replace('http://', 'https://')
@@ -378,6 +384,11 @@ class TrafficEngine:
     def _run_http_plain(self, job: TrafficJob):
         """HTTP requests to the plain HTTP server on port 9999 (App-ID: web-browsing)."""
         cfg = job.config
+        if cfg.get('browser_mode'):
+            host = cfg.get('host', 'server')
+            port = int(cfg.get('port', 9999))
+            return self._run_browser_mode(job, [f"http://{host}:{port}"], ignore_ssl=False)
+
         host = cfg.get('host', 'server')
         port = int(cfg.get('port', 9999))
         method = cfg.get('method', 'GET').upper()
@@ -764,6 +775,8 @@ class TrafficEngine:
         # Support multi-URL: 'urls' textarea (newline/comma separated) or legacy 'url' field
         raw = cfg.get('urls', cfg.get('url', 'https://www.google.com'))
         urls = [u.strip() for u in raw.replace(',', '\n').split('\n') if u.strip()]
+        if cfg.get('browser_mode') and urls:
+            return self._run_browser_mode(job, urls, ignore_ssl=cfg.get('ignore_ssl', False))
         if not urls:
             job.log("No URLs configured")
             return
@@ -817,6 +830,86 @@ class TrafficEngine:
                 job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
                 time.sleep(burst_pause)
         job.log("Stopped")
+
+    # ─── Browser Mode (Playwright) ────────────────────────
+
+    def _run_browser_mode(self, job, urls, ignore_ssl=True):
+        """Shared Playwright browser mode — real browser with authentic L7 headers/TLS."""
+        from playwright.sync_api import sync_playwright
+
+        cfg = job.config
+        browser_choice = cfg.get('browser_type', 'Random')
+        interval, burst_count, burst_pause = self._get_timing(cfg)
+
+        proxy_url = self._get_proxy_url(cfg)
+        proxy_cfg = None
+        if proxy_url:
+            proxy_cfg = {"server": proxy_url}
+            proxy_data = cfg.get('_proxy', {})
+            if proxy_data.get('username'):
+                proxy_cfg["username"] = proxy_data["username"]
+                proxy_cfg["password"] = proxy_data.get("password", "")
+
+        burst_str = f" burst={burst_count}x pause={burst_pause}s" if burst_count > 1 else ""
+        proxy_str = f" proxy={proxy_url}" if proxy_url else ""
+        job.log(f"Browser mode: {browser_choice} → {len(urls)} URL(s) interval={interval:.1f}s{burst_str}{proxy_str}")
+
+        with sync_playwright() as p:
+            browser_map = {'Chromium': p.chromium, 'Firefox': p.firefox, 'WebKit': p.webkit}
+            if browser_choice == 'Random':
+                browser_list = list(browser_map.items())
+            else:
+                browser_list = [(browser_choice, browser_map.get(browser_choice, p.chromium))]
+
+            url_index = 0
+            while not job.should_stop():
+                # Pick browser — rotate on each cycle when Random
+                b_name, b_type = random.choice(browser_list)
+                try:
+                    browser = b_type.launch(headless=True)
+                except Exception as e:
+                    job.stats['errors'] += 1
+                    job.log(f"Failed to launch {b_name}: {e}")
+                    time.sleep(5)
+                    continue
+
+                try:
+                    ctx_kwargs = {"ignore_https_errors": ignore_ssl}
+                    if proxy_cfg:
+                        ctx_kwargs["proxy"] = proxy_cfg
+                    context = browser.new_context(**ctx_kwargs)
+                    page = context.new_page()
+
+                    for _ in range(burst_count):
+                        if job.should_stop():
+                            break
+                        url = urls[url_index % len(urls)]
+                        url_index += 1
+                        try:
+                            resp = page.goto(url, wait_until='load', timeout=30000)
+                            status = resp.status if resp else 0
+                            content = page.content()
+                            recv_bytes = len(content.encode('utf-8'))
+                            job.stats['bytes_recv'] += recv_bytes
+                            job.stats['requests'] += 1
+                            job.log(f"{b_name} {url} → {status} | recv={recv_bytes}B")
+                        except Exception as e:
+                            job.stats['errors'] += 1
+                            job.log(f"{b_name} error: {url} — {e}")
+
+                        if burst_count == 1:
+                            time.sleep(interval)
+
+                    if burst_count > 1:
+                        job.log(f"Burst of {burst_count} complete, pausing {burst_pause}s")
+                        time.sleep(burst_pause)
+                finally:
+                    try:
+                        browser.close()
+                    except Exception:
+                        pass
+
+        job.log("Browser mode stopped")
 
     # ─── hping3 ─────────────────────────────────────────────
 

@@ -6,3 +6,4 @@ gunicorn==23.0.0
 httpx[http2]==0.28.1
 PySocks==1.7.1
 requests[socks]
+playwright

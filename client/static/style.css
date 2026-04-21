@@ -241,50 +241,71 @@ body {
 }
 
 /* Topology — vis.js tooltip override */
+/* Topology Container */
+#topology-container {
+    background: linear-gradient(135deg, #f8fafc 0%, #eef2f7 100%) !important;
+    border: 1px solid #dce3ed !important;
+    border-radius: 10px !important;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.04);
+}
+
 div.vis-tooltip {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 14px;
+    background: #ffffff;
+    border: none;
+    border-radius: 10px;
+    padding: 12px 16px;
     font-size: 12px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: var(--text-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    max-width: 260px;
-    line-height: 1.5;
+    color: #1e2a3a;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+    max-width: 280px;
+    line-height: 1.6;
+    backdrop-filter: blur(10px);
 }
 
 .topo-legend {
-    padding: 6px 12px;
+    padding: 8px 14px;
     display: flex;
-    gap: 16px;
+    gap: 10px;
     flex-wrap: wrap;
     align-items: center;
     font-size: 11px;
     border-top: 1px solid var(--border);
-    background: var(--bg-card);
-    min-height: 28px;
+    background: linear-gradient(180deg, #fafbfd, #f5f7fa);
+    min-height: 32px;
 }
 
 .topo-legend-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 5px;
     color: var(--text-primary);
+    background: #ffffff;
+    padding: 3px 10px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    font-weight: 500;
+    transition: opacity 0.2s;
 }
 
 .topo-legend-dot {
     display: inline-block;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
+    box-shadow: 0 0 4px currentColor;
 }
 
 .topo-stats {
-    padding: 8px 12px;
+    padding: 8px 14px;
     font-size: 11px;
     color: var(--text-secondary);
     border-top: 1px solid var(--border);
-    background: var(--bg-card);
+    background: linear-gradient(180deg, #f5f7fa, #fafbfd);
+    font-weight: 500;
+}
+
+.topo-stats strong {
+    letter-spacing: 0.3px;
 }

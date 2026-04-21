@@ -443,7 +443,7 @@ function toggleAdvanced(clientName, proto) {
 }
 // ─── Protocol Definitions ────────────────────────────────────
 const DSCP_OPTIONS = ['BE','CS1','AF11','AF12','AF13','CS2','AF21','AF22','AF23','CS3','AF31','AF32','AF33','CS4','AF41','AF42','AF43','CS5','VA','EF','CS6','CS7'];
-const ADVANCED_KEYS = ['proxy', 'dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
+const ADVANCED_KEYS = ['browser_mode', 'browser_type', 'proxy', 'dscp', 'rate_pps', 'burst_enabled', 'burst_count', 'burst_pause'];
 
 const PROTOCOLS = {
     https: { name: 'HTTPS', fields: [
@@ -455,6 +455,8 @@ const PROTOCOLS = {
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: true },
         { key: 'upload', label: 'Upload Mode', type: 'checkbox', default: false },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'browser_mode', label: 'Browser Mode', type: 'checkbox', default: false },
+        { key: 'browser_type', label: 'Browser', type: 'select', options: ['Random','Chromium','Firefox','WebKit'], default: 'Random' },
         { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -495,6 +497,8 @@ const PROTOCOLS = {
         { key: 'data_size_kb', label: 'Data Size (KB)', type: 'number', default: 1 },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'random_size', label: 'Random Size', type: 'checkbox', default: false },
+        { key: 'browser_mode', label: 'Browser Mode', type: 'checkbox', default: false },
+        { key: 'browser_type', label: 'Browser', type: 'select', options: ['Random','Chromium','Firefox','WebKit'], default: 'Random' },
         { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global','On','Off','Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -555,6 +559,8 @@ const PROTOCOLS = {
         { key: 'method', label: 'Method', type: 'select', options: ['GET','POST','HEAD'], default: 'GET' },
         { key: 'interval', label: 'Interval (s)', type: 'number', default: 1, step: 0.1 },
         { key: 'ignore_ssl', label: 'Ignore SSL', type: 'checkbox', default: false },
+        { key: 'browser_mode', label: 'Browser Mode', type: 'checkbox', default: false },
+        { key: 'browser_type', label: 'Browser', type: 'select', options: ['Random','Chromium','Firefox','WebKit'], default: 'Random' },
         { key: 'proxy', label: 'Proxy', type: 'select', options: ['Global', 'On', 'Off', 'Custom'], default: 'Global' },
         { key: 'dscp', label: 'DSCP', type: 'select', options: DSCP_OPTIONS, default: 'BE' },
         { key: 'rate_pps', label: 'Rate (pps)', type: 'number', default: 0, step: 1 },
@@ -1279,7 +1285,15 @@ var clientTopoAnimState = {};
 var clientTopoHasTraffic = {};
 var clientTopoActiveEdgeIds = {};
 
-var TOPO_COLORS = ['#0066cc','#00a67e','#e67e22','#8e44ad','#2980b9','#c0392b','#16a085','#d35400','#2c3e50','#27ae60'];
+var TOPO_COLORS = ['#2563eb','#059669','#d97706','#7c3aed','#0891b2','#dc2626','#0d9488','#ea580c','#4f46e5','#16a34a'];
+
+var TOPO_ICONS = {
+    client: function(fill, stroke) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56"><defs><filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.15"/></filter></defs><rect x="8" y="12" width="40" height="28" rx="3" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2" filter="url(#s)"/><rect x="16" y="17" width="24" height="16" rx="1.5" fill="#fff" opacity="0.6"/><path d="M20 44h16M28 40v4" stroke="' + stroke + '" stroke-width="2" stroke-linecap="round"/><rect x="18" y="44" width="20" height="3" rx="1.5" fill="' + stroke + '" opacity="0.5"/></svg>'); },
+    server: function(fill, stroke) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 56 56"><defs><filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.15"/></filter></defs><rect x="10" y="6" width="36" height="44" rx="4" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2" filter="url(#s)"/><rect x="15" y="12" width="26" height="8" rx="2" fill="#fff" opacity="0.5"/><circle cx="36" cy="16" r="2" fill="' + stroke + '"/><rect x="15" y="24" width="26" height="8" rx="2" fill="#fff" opacity="0.5"/><circle cx="36" cy="28" r="2" fill="' + stroke + '"/><rect x="15" y="36" width="26" height="8" rx="2" fill="#fff" opacity="0.5"/><circle cx="36" cy="40" r="2" fill="' + stroke + '"/></svg>'); },
+    router: function(fill, stroke) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><defs><filter id="s"><feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.15"/></filter></defs><circle cx="24" cy="24" r="18" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2" filter="url(#s)"/><circle cx="24" cy="24" r="5" fill="' + stroke + '" opacity="0.8"/><path d="M24 10v8M24 30v8M10 24h8M30 24h8M14.5 14.5l5.5 5.5M28 28l5.5 5.5M33.5 14.5l-5.5 5.5M20 28l-5.5 5.5" stroke="' + stroke + '" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/></svg>'); },
+    hop: function(fill, stroke) { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="' + fill + '" stroke="' + stroke + '" stroke-width="2"/><circle cx="16" cy="16" r="4" fill="' + stroke + '" opacity="0.4"/></svg>'); },
+    timeout: function() { return 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" cy="16" r="10" fill="#fef2f2" stroke="#ef4444" stroke-width="2" stroke-dasharray="4 3"/><text x="16" y="20" text-anchor="middle" fill="#ef4444" font-size="14" font-weight="bold">?</text></svg>'); }
+};
 
 async function clientRefreshTopology(clientName) {
     try {
@@ -1327,21 +1341,21 @@ function clientRenderTopology(clientName, data) {
         hopSigMap[sig].push(k);
     });
 
-    // CLIENT node — clean circle
-    nodes.add({ id: 'client', label: 'Client', shape: 'circle', size: 28,
-        color: { background: '#e6f4ee', border: '#00a67e' },
-        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
-        borderWidth: 2, level: 0,
-        title: _topoTip(['<strong>Client</strong>', 'IP: ' + data.client_ip]) });
+    // CLIENT node — laptop icon
+    nodes.add({ id: 'client', label: 'Client', shape: 'image', size: 30,
+        image: TOPO_ICONS.client('#ecfdf5', '#059669'),
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a', vadjust: 8 },
+        level: 0,
+        title: _topoTip(['<strong style="font-size:13px">Client</strong>', '<span style="color:#6b7a8d">IP: ' + data.client_ip + '</span>']) });
 
-    // SERVER node — clean circle
+    // SERVER node — server rack icon
     var maxHops = 1;
     pathKeys.forEach(function(k) { var h = (pathsObj[k].hops || []).length; if (h > maxHops) maxHops = h; });
-    nodes.add({ id: 'server', label: 'Server', shape: 'circle', size: 28,
-        color: { background: '#e8f0fe', border: '#0066cc' },
-        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a' },
-        borderWidth: 2, level: maxHops + 1,
-        title: _topoTip(['<strong>Server</strong>', 'IP: ' + data.server_host]) });
+    nodes.add({ id: 'server', label: 'Server', shape: 'image', size: 30,
+        image: TOPO_ICONS.server('#eff6ff', '#2563eb'),
+        font: { size: 12, face: '-apple-system, sans-serif', color: '#1e2a3a', vadjust: 8 },
+        level: maxHops + 1,
+        title: _topoTip(['<strong style="font-size:13px">Server</strong>', '<span style="color:#6b7a8d">IP: ' + data.server_host + '</span>']) });
 
     var renderedSigs = {};
     var pathIndex = 0;
@@ -1361,12 +1375,12 @@ function clientRenderTopology(clientName, data) {
         var isRunning = mergedKeys.some(function(k) { return k !== 'default' && pathsObj[k].running; });
         var isDefaultOnly = mergedKeys.length === 1 && mergedKeys[0] === 'default';
 
-        var color = isDefaultOnly ? '#aab4c2' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
+        var color = isDefaultOnly ? '#94a3b8' : TOPO_COLORS[pathIndex % TOPO_COLORS.length];
         if (!isDefaultOnly) pathIndex++;
 
         legendItems.push({ labels: labels, color: color, running: isRunning, defaultOnly: isDefaultOnly });
 
-        var edgeWidth = isRunning ? 3 : 1.5;
+        var edgeWidth = isRunning ? 3.5 : 1.5;
 
         var nodeChain = ['client'];
         for (var i = 0; i < hops.length; i++) {
@@ -1380,22 +1394,24 @@ function clientRenderTopology(clientName, data) {
             if (addedNodes[sharedId]) { nodeChain.push(sharedId); continue; }
 
             var router = routerByIp[h.ip];
-            var bg, border, nodeLabel = '', nodeSize = 12, tipLines = [];
+            var nodeImage, nodeLabel = '', nodeSize = 18, tipLines = [];
 
             if (isTimeout) {
-                bg = '#fde8e8'; border = '#dc3545'; nodeSize = 10;
-                tipLines = ['<strong>Hop ' + h.hop + '</strong>', '<span style="color:#dc3545">* (timeout)</span>'];
+                nodeImage = TOPO_ICONS.timeout();
+                nodeSize = 16;
+                tipLines = ['<strong style="font-size:13px">Hop ' + h.hop + '</strong>', '<span style="color:#ef4444;font-weight:500">* Request timed out</span>'];
             } else if (router) {
-                var mc = { healthy: { bg: '#e6f4ee', b: '#00a67e' }, impaired: { bg: '#fff3e0', b: '#ff9800' }, link_down: { bg: '#fde8e8', b: '#dc3545' } };
-                var rc = mc[router.current_mode] || { bg: '#e8f0fe', b: color };
-                bg = rc.bg; border = rc.b;
-                nodeLabel = router.name; nodeSize = 16;
-                var mode = router.current_mode ? router.current_mode.replace('_', ' ') : '';
-                var modeColors = { healthy: '#00a67e', impaired: '#ff9800', link_down: '#dc3545' };
-                var modeColor = modeColors[router.current_mode] || '#6b7a8d';
-                tipLines = ['<strong>' + router.name + '</strong>', 'IP: ' + h.ip,
-                    'Mode: <span style="color:' + modeColor + '">' + mode + '</span>'];
-                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
+                var modeColorMap = { healthy: { fill: '#ecfdf5', stroke: '#059669' }, impaired: { fill: '#fffbeb', stroke: '#d97706' }, link_down: { fill: '#fef2f2', stroke: '#dc2626' } };
+                var mc = modeColorMap[router.current_mode] || { fill: '#eff6ff', stroke: color };
+                nodeImage = TOPO_ICONS.router(mc.fill, mc.stroke);
+                nodeLabel = router.name; nodeSize = 26;
+                var mode = router.current_mode ? router.current_mode.replace('_', ' ') : 'unknown';
+                var modeTextColors = { healthy: '#059669', impaired: '#d97706', link_down: '#dc2626' };
+                var modeColor = modeTextColors[router.current_mode] || '#6b7a8d';
+                tipLines = ['<strong style="font-size:13px">' + router.name + '</strong>',
+                    '<span style="color:#6b7a8d">IP: ' + h.ip + '</span>',
+                    'Status: <span style="color:' + modeColor + ';font-weight:600">' + mode + '</span>'];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: <strong>' + h.rtt + ' ms</strong>');
                 if (router.current_mode === 'impaired' && router.impairment_config) {
                     var ic = router.impairment_config;
                     var parts = [];
@@ -1403,46 +1419,49 @@ function clientRenderTopology(clientName, data) {
                     if (ic.jitter_ms) parts.push(ic.jitter_ms + 'ms jitter');
                     if (ic.packet_loss_pct) parts.push(ic.packet_loss_pct + '% loss');
                     if (ic.bandwidth_mbps) parts.push(ic.bandwidth_mbps + ' Mbps');
-                    if (parts.length) tipLines.push('<span style="color:#ff9800">' + parts.join(' / ') + '</span>');
+                    if (parts.length) tipLines.push('<span style="color:#d97706;font-size:11px">' + parts.join(' \u00b7 ') + '</span>');
                 }
             } else {
-                bg = '#e8f0fe'; border = color;
-                tipLines = ['<strong>Hop ' + h.hop + '</strong>', 'IP: ' + h.ip];
-                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: ' + h.rtt + ' ms');
+                nodeImage = TOPO_ICONS.hop('#eff6ff', color);
+                nodeSize = 16;
+                tipLines = ['<strong style="font-size:13px">Hop ' + h.hop + '</strong>', '<span style="color:#6b7a8d">IP: ' + h.ip + '</span>'];
+                if (h.rtt && h.rtt !== '--') tipLines.push('Latency: <strong>' + h.rtt + ' ms</strong>');
             }
 
-            nodes.add({ id: sharedId, label: nodeLabel, shape: 'dot', size: nodeSize,
-                color: { background: bg, border: border },
-                font: { size: 10, face: '-apple-system, sans-serif', color: '#1e2a3a' },
-                borderWidth: 2, level: i + 1,
+            nodes.add({ id: sharedId, label: nodeLabel, shape: 'image', size: nodeSize,
+                image: nodeImage,
+                font: { size: 10, face: '-apple-system, sans-serif', color: '#1e2a3a', vadjust: 6 },
+                level: i + 1,
                 title: _topoTip(tipLines) });
             addedNodes[sharedId] = true;
             nodeChain.push(sharedId);
         }
         nodeChain.push('server');
 
-        var roundness = pathIndex > 1 ? pathIndex * 0.15 : 0;
+        var roundness = pathIndex > 1 ? pathIndex * 0.12 : 0;
         for (var j = 0; j < nodeChain.length - 1; j++) {
             var edgeId = 'e_' + pathKey + '_' + j;
             edges.add({ id: edgeId, from: nodeChain[j], to: nodeChain[j + 1],
-                arrows: { to: { enabled: true, scaleFactor: 0.4 } },
-                color: { color: isRunning ? color : '#aab4c2' }, width: edgeWidth,
-                dashes: isRunning ? [8, 4] : (isDefaultOnly ? [4, 4] : false),
-                smooth: roundness > 0 ? { type: 'curvedCW', roundness: roundness } : { type: 'cubicBezier' } });
+                arrows: { to: { enabled: true, scaleFactor: 0.5, type: 'arrow' } },
+                color: { color: isRunning ? color : '#cbd5e1', highlight: color, hover: color },
+                width: edgeWidth,
+                dashes: isRunning ? [10, 5] : (isDefaultOnly ? [5, 5] : false),
+                smooth: roundness > 0 ? { type: 'curvedCW', roundness: roundness } : { type: 'cubicBezier' },
+                hoverWidth: 1.5, selectionWidth: 2 });
             if (isRunning) clientTopoActiveEdgeIds[clientName].push({ id: edgeId, color: color });
         }
     });
 
     if (pathKeys.length === 0) {
         edges.add({ id: 'e_direct', from: 'client', to: 'server',
-            arrows: { to: { enabled: true, scaleFactor: 0.4 } },
-            color: { color: '#aab4c2' }, width: 1.5, dashes: [4, 4] });
+            arrows: { to: { enabled: true, scaleFactor: 0.5, type: 'arrow' } },
+            color: { color: '#cbd5e1' }, width: 1.5, dashes: [5, 5] });
     }
 
     var options = {
-        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 140, nodeSpacing: 50 } },
+        layout: { hierarchical: { direction: 'LR', sortMethod: 'directed', levelSeparation: 160, nodeSpacing: 60 } },
         physics: false,
-        interaction: { hover: true, tooltipDelay: 100, dragNodes: true, zoomView: true, dragView: true }
+        interaction: { hover: true, tooltipDelay: 80, dragNodes: true, zoomView: true, dragView: true }
     };
 
     // Protocol legend bar
@@ -1478,11 +1497,16 @@ function clientRenderTopology(clientName, data) {
     if (hasTraffic) {
         var statParts = runningPaths.map(function(k) {
             var p = pathsObj[k];
-            return p.label + ' (' + fmtBytes((p.stats || {}).bytes_sent || 0) + ' sent)';
+            var s = p.stats || {};
+            var sp = [p.label];
+            if (s.bytes_sent) sp.push(fmtBytes(s.bytes_sent) + ' sent');
+            if (s.bytes_recv) sp.push(fmtBytes(s.bytes_recv) + ' recv');
+            if (s.requests) sp.push(s.requests + ' reqs');
+            return sp.join(' \u00b7 ');
         });
-        statsEl.innerHTML = '<strong style="color:var(--accent-teal)">Active:</strong> ' + statParts.join(' | ');
+        statsEl.innerHTML = '<strong style="color:#059669">\u25CF Active Flows:</strong> ' + statParts.join(' &nbsp;\u2502&nbsp; ');
     } else {
-        statsEl.innerHTML = '<span style="color:var(--text-secondary)">No active traffic flows</span>';
+        statsEl.innerHTML = '<span style="color:var(--text-secondary)">\u25CB No active traffic flows</span>';
     }
 
     if (clientTopoNetworks[clientName]) {
@@ -1498,11 +1522,12 @@ function clientRenderTopology(clientName, data) {
             var es = clientTopoEdges[clientName];
             var activeEdges = clientTopoActiveEdgeIds[clientName] || [];
             if (!es || !clientTopoHasTraffic[clientName]) return;
-            var st = (clientTopoAnimState[clientName] + 1) % 3;
+            var st = (clientTopoAnimState[clientName] + 1) % 4;
             clientTopoAnimState[clientName] = st;
-            var dp = [[8,4],[6,6],[4,8]];
-            activeEdges.forEach(function(e) { es.update({ id: e.id, dashes: dp[st], color: { color: e.color } }); });
-        }, 800);
+            var dp = [[10,5],[8,7],[5,10],[7,8]];
+            var wp = [3.5, 4, 3.5, 3];
+            activeEdges.forEach(function(e) { es.update({ id: e.id, dashes: dp[st], width: wp[st], color: { color: e.color } }); });
+        }, 600);
     } else if (!hasTraffic && clientTopoAnimIntervals[clientName]) {
         clearInterval(clientTopoAnimIntervals[clientName]);
         clientTopoAnimIntervals[clientName] = null;
