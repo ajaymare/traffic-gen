@@ -1042,28 +1042,35 @@ class TrafficEngine:
                 f"flood={flood} DSCP={dscp}(TOS={tos})")
 
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            job.log(f"hping3 cmd: {' '.join(cmd)}")
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            import select
             while not job.should_stop() and proc.poll() is None:
-                line = proc.stdout.readline()
-                if line:
-                    stripped = line.strip()
-                    if stripped:
-                        job.stats['requests'] += 1
-                        job.stats['bytes_sent'] += packet_size
-                        if 'rtt=' in stripped or 'flags=' in stripped or 'ip=' in stripped:
-                            job.stats['bytes_recv'] += packet_size
-                        job.log(f"hping3 {host} → {stripped}")
-                else:
-                    time.sleep(0.1)
+                # Read from both stdout and stderr
+                readable, _, _ = select.select([proc.stdout, proc.stderr], [], [], 0.5)
+                for stream in readable:
+                    line = stream.readline()
+                    if line:
+                        stripped = line.strip()
+                        if stripped:
+                            job.stats['requests'] += 1
+                            job.stats['bytes_sent'] += packet_size
+                            if 'rtt=' in stripped or 'flags=' in stripped or 'ip=' in stripped:
+                                job.stats['bytes_recv'] += packet_size
+                            job.log(f"hping3 {host} → {stripped}")
             if proc.poll() is None:
                 proc.terminate()
                 proc.wait(timeout=5)
-            # Read remaining output
-            remaining = proc.stdout.read()
-            if remaining:
-                for line in remaining.strip().split('\n'):
-                    if line.strip():
-                        job.log(f"hping3 {host} → {line.strip()}")
+            # Read remaining output from both streams
+            for stream in (proc.stdout, proc.stderr):
+                remaining = stream.read()
+                if remaining:
+                    for line in remaining.strip().split('\n'):
+                        if line.strip():
+                            job.log(f"hping3 {host} → {line.strip()}")
+            rc = proc.returncode
+            if rc and rc != -15:  # -15 is SIGTERM (normal stop)
+                job.log(f"hping3 exited with code {rc}")
         except Exception as e:
             job.stats['errors'] += 1
             job.log(f"hping3 error: {e}")
