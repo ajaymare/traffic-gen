@@ -75,6 +75,42 @@ def _random_xff():
     return f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
 
 
+# Realistic browser User-Agent strings for App-ID classification
+_USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:133.0) Gecko/20100101 Firefox/133.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
+]
+
+
+def _browser_headers(url=''):
+    """Generate realistic browser headers for Palo Alto App-ID classification."""
+    ua = random.choice(_USER_AGENTS)
+    headers = {
+        'User-Agent': ua,
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Cache-Control': 'max-age=0',
+        'X-Forwarded-For': _random_xff(),
+    }
+    # Add Sec-CH-UA for Chrome/Edge user agents
+    if 'Chrome/' in ua:
+        headers['Sec-CH-UA'] = '"Chromium";v="131", "Not_A Brand";v="24"'
+        headers['Sec-CH-UA-Mobile'] = '?0'
+        headers['Sec-CH-UA-Platform'] = '"Windows"' if 'Windows' in ua else '"macOS"'
+    return headers
+
+
 @dataclass
 class TrafficJob:
     protocol: str
@@ -288,7 +324,7 @@ class TrafficEngine:
                         req_url = url
                         try:
                             cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
-                            headers = {'X-Forwarded-For': _random_xff()}
+                            headers = _browser_headers(url)
 
                             if upload and cur_size_kb > 0:
                                 data = os.urandom(cur_size_kb * 1024)
@@ -342,7 +378,7 @@ class TrafficEngine:
                     req_url = url
                     try:
                         cur_size_kb = random.randint(1, max(data_size_kb, 1024)) if random_size else data_size_kb
-                        headers = {'X-Forwarded-For': _random_xff()}
+                        headers = _browser_headers(url)
 
                         if upload and cur_size_kb > 0:
                             data = os.urandom(cur_size_kb * 1024)
@@ -418,7 +454,7 @@ class TrafficEngine:
                 recv_bytes = 0
                 try:
                     cur_size_kb = random.randint(1, max(data_size_kb, 100)) if random_size else data_size_kb
-                    headers = {'X-Forwarded-For': _random_xff()}
+                    headers = _browser_headers(base_url)
 
                     if method == 'POST':
                         data = os.urandom(cur_size_kb * 1024)
@@ -813,7 +849,7 @@ class TrafficEngine:
                 url = urls[url_index % len(urls)]
                 url_index += 1
                 try:
-                    headers = {'X-Forwarded-For': _random_xff()}
+                    headers = _browser_headers(url)
                     if method == 'GET':
                         resp = session.get(url, headers=headers, verify=verify_ssl, timeout=30)
                     else:
