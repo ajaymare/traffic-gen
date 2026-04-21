@@ -86,16 +86,22 @@ docker compose up -d
 
 ### Source IP Simulation
 - **Random source IPs**: Simulate multiple clients from a single container using IP aliases
-- **X-Forwarded-For**: Alias IPs used in X-Forwarded-For headers for all L7 HTTP traffic
+- **Socket-level binding**: TCP sockets bound to alias IPs via `source_address` for authentic multi-client simulation
+- **Session rotation**: HTTP sessions recreated on IP change to maintain clean keep-alive connections
 
 ### Traffic Topology
 - **Per-protocol traceroute**: Each protocol runs its own TCP/UDP traceroute (e.g., TCP port 443 for HTTPS, UDP port 53 for DNS) to reveal SD-WAN policy routing differences
 - **Multi-path visualization**: vis.js network graph shows all discovered paths with color-coded edges per protocol
-- **Enterprise-grade icons**: SVG icons for client (laptop), server (rack), router, and hop nodes
+- **Enterprise-grade SVG icons**: Laptop with status LED (client), server rack with drive bays and LEDs (server), router with directional arrows and status ring, numbered hop circles, red X timeout markers
+- **IP subtitle labels**: Each node displays its IP address as a subtitle below the name
+- **Edge latency labels**: RTT latency displayed directly on edges (e.g., "2.3 ms") for at-a-glance visibility
 - **Path merging**: Paths with identical hops automatically merge to reduce clutter, with protocol labels combined
-- **Live animation**: 4-phase pulse animation on active traffic flow edges
-- **Rich tooltips**: Hover nodes for detailed info with modern card-style tooltips
-- **Stats bar**: Real-time topology stats showing active protocols, bytes, and request counts
+- **Smooth 8-phase animation**: Animated dash flow with opacity cycling on active traffic edges (300ms interval)
+- **Structured tooltips**: Card-style tooltips with colored left border and color-coded latency (green <20ms, yellow 20-100ms, red >100ms)
+- **Pulsing legend**: Active protocol dots pulse with CSS animation; line segments show edge colors
+- **Stats bar mini cards**: Per-protocol stat cards with colored accent borders showing bytes, requests, and errors
+- **Dot-grid canvas**: Subtle radial-gradient dot pattern background for professional diagram feel
+- **Empty state**: SVG placeholder with "Start a protocol to see topology" when no flows are active
 - **30-second cache**: Traceroute results cached per protocol to avoid excessive probing
 
 ### Monitoring
@@ -241,7 +247,7 @@ Simulate traffic from multiple clients using a single container:
 
 1. Open client dashboard → Source IP Simulation (click to expand)
 2. Check **Random Source IPs**, set Base IP and Count → click **Apply**
-3. Each connection binds to a random alias IP
-4. All L7 HTTP traffic automatically uses alias IPs in the `X-Forwarded-For` header
+3. Each connection binds its TCP socket to a random alias IP at the OS level
+4. Sessions are automatically recreated when the source IP rotates to maintain clean connections
 
 Requires `NET_ADMIN` capability (already included in docker run commands above).
