@@ -556,21 +556,36 @@ class TrafficEngine:
                 domain = domains[domain_idx % len(domains)]
                 domain_idx += 1
                 try:
-                    cmd = ['dig', f'@{host}', '-p', str(port), domain, 'A', '+short', '+timeout=3', '+tries=1']
+                    cmd = ['dig', f'@{host}', '-p', str(port), domain, 'A',
+                           '+noedns', '+timeout=3', '+tries=1', '+noall', '+answer', '+stats']
                     result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
                     output = result.stdout.strip()
                     job.stats['requests'] += 1
-                    # Estimate bytes (dig query ~40-60 bytes, response varies)
+                    # Parse answer lines and stats
+                    lines = output.split('\n') if output else []
+                    answer_lines = [l for l in lines if l and not l.startswith(';;')]
+                    stat_lines = [l for l in lines if l.startswith(';;')]
+                    # Extract msg size from stats (;; MSG SIZE  rcvd: 56)
                     query_size = 40 + len(domain)
-                    resp_size = len(result.stdout) + len(result.stderr)
+                    resp_size = 0
+                    for sl in stat_lines:
+                        if 'rcvd' in sl:
+                            try:
+                                resp_size = int(sl.split('rcvd:')[1].strip())
+                            except (ValueError, IndexError):
+                                resp_size = len(output)
                     job.stats['bytes_sent'] += query_size
-                    job.stats['bytes_recv'] += resp_size
-                    if result.returncode == 0 and output:
-                        answers = output.split('\n')
-                        job.log(f"DNS {domain} → @{host}:{port} | answers={len(answers)} [{', '.join(answers[:3])}]")
+                    job.stats['bytes_recv'] += max(resp_size, len(output))
+                    if result.returncode == 0 and answer_lines:
+                        # Extract IPs from answer lines (last field)
+                        ips = [l.split()[-1] for l in answer_lines if len(l.split()) >= 5]
+                        job.log(f"DNS {domain} → @{host}:{port} | answers={len(answer_lines)} [{', '.join(ips[:3])}]")
+                    elif result.returncode == 0:
+                        job.stats['errors'] += 1
+                        job.log(f"DNS {domain} → @{host}:{port} | no answer")
                     else:
                         job.stats['errors'] += 1
-                        err = result.stderr.strip().split('\n')[0] if result.stderr.strip() else 'no answer'
+                        err = result.stderr.strip().split('\n')[0] if result.stderr.strip() else 'failed'
                         job.log(f"DNS {domain} → @{host}:{port} | {err}")
                 except subprocess.TimeoutExpired:
                     job.stats['errors'] += 1
