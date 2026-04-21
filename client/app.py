@@ -251,7 +251,7 @@ _TOPO_CACHE_TTL = 30
 
 def _run_traceroute(dest, extra_args=None):
     """Run traceroute to dest with optional extra args, return list of hop dicts."""
-    cmd = ['traceroute', '-n', '-q', '1', '-w', '2', '-m', '15']
+    cmd = ['sudo', 'traceroute', '-n', '-q', '1', '-w', '2', '-m', '15']
     if extra_args:
         cmd.extend(extra_args)
     cmd.append(dest)
